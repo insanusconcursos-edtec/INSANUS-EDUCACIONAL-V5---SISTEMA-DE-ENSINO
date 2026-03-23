@@ -1,29 +1,32 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as admin from 'firebase-admin';
+import * as firebaseAdmin from 'firebase-admin';
 import { fetchPandaVideoTranscription } from '../src/backend/services/pandaVideoService.js';
 import { generateStudyMaterial } from '../src/backend/services/geminiService.js';
 
-// Estende o timeout para 60 segundos (limite para planos Pro na Vercel, ou máximo permitido no Hobby)
+// Correção ESM/CJS: Garante que pegamos o objeto correto na Vercel
+const admin = (firebaseAdmin as any).default || firebaseAdmin;
+
 export const maxDuration = 60;
 
-// Inicialização do Firebase Admin com tratamento de quebras de linha na Private Key
-if (!admin.apps.length) {
-  try {
+// Inicialização segura no topo (aproveitando o Cold Start)
+try {
+  if (!admin.apps?.length) {
     const privateKey = process.env.FIREBASE_PRIVATE_KEY
-      ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n').replace(/"/g, '')
       : undefined;
 
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: privateKey,
-      }),
-    });
-    console.log('Firebase Admin inicializado na Serverless Function.');
-  } catch (error) {
-    console.error('Erro ao inicializar Firebase Admin:', error);
+    if (privateKey && process.env.FIREBASE_PROJECT_ID) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: privateKey,
+        }),
+      });
+    }
   }
+} catch (error) {
+  console.error("🔴 CRASH GLOBAL NO FIREBASE INIT:", error);
 }
 
 const dbAdmin = admin.firestore();
