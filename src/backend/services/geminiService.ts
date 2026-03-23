@@ -14,10 +14,10 @@ const MODEL_NAME = "gemini-3.1-pro-preview";
  * @returns Material didático formatado em Markdown
  */
 export async function generateStudyMaterial(transcriptionText: string, folderTitle: string): Promise<string> {
-  const apiKey = process.env.MINHA_CHAVE_GEMINI || process.env.GEMINI_API_KEY;
+  const apiKey = process.env.MINHA_CHAVE_GEMINI;
 
   if (!apiKey) {
-    throw new Error("Chave do Gemini não configurada.");
+    throw new Error("Chave do Gemini (MINHA_CHAVE_GEMINI) não configurada.");
   }
 
   const ai = new GoogleGenAI({ apiKey });

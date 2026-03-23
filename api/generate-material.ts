@@ -113,6 +113,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    const geminiKey = process.env.MINHA_CHAVE_GEMINI;
+    if (!geminiKey) {
+      throw new Error("A variável MINHA_CHAVE_GEMINI não foi encontrada no servidor.");
+    }
+
     // 3. Gerar material didático usando o Gemini
     const generatedText = await generateStudyMaterial(fullTranscription, folderTitle);
 
