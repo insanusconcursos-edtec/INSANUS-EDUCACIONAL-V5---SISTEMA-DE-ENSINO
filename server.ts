@@ -38,8 +38,8 @@ async function startServer() {
   // Middleware para JSON
   app.use(express.json());
 
-  // Nota: As rotas /api/generate-material, /api/panda-videos, /api/panda-explorer e /api/webhooks/ticto
-  // foram migradas para Vercel Serverless Functions na pasta /api.
+  // Nota: As rotas /api/generate-material, /api/panda-videos, /api/panda-explorer, /api/webhooks/ticto
+  // e /api/admin/courses/:courseId/students foram migradas para Vercel Serverless Functions na pasta /api.
   // Elas são mantidas aqui apenas para compatibilidade com o ambiente de desenvolvimento local.
 
   // Rota de API: /api/generate-material
