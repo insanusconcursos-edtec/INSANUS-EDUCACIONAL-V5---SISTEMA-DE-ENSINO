@@ -274,33 +274,8 @@ async function startServer() {
   });
 
   // --- MIGRATION LINKS ---
-
-  // Criar Link de Migração (Admin)
-  app.post('/api/admin/migration-links', async (req, res) => {
-    try {
-      const { courseId, expiresAt, accessDurationDays } = req.body;
-      const { dbAdmin } = getAdminConfig();
-
-      const newLink = {
-        courseId,
-        expiresAt,
-        accessDurationDays: Number(accessDurationDays),
-        active: true,
-        createdAt: new Date().toISOString()
-      };
-
-      const docRef = await dbAdmin.collection('MigrationLinks').add(newLink);
-      
-      return res.status(201).json({ 
-        success: true, 
-        id: docRef.id,
-        link: `/migracao/${docRef.id}`
-      });
-    } catch (error) {
-      console.error("Erro ao criar link de migração:", error);
-      return res.status(500).json({ success: false, error: "Erro ao criar link." });
-    }
-  });
+  // Nota: A rota POST /api/admin/migration-links foi migrada para Vercel Serverless Functions.
+  // As rotas abaixo serão migradas em breve.
 
   // Validar Link de Migração (Público)
   app.get('/api/migration/:linkId', async (req, res) => {

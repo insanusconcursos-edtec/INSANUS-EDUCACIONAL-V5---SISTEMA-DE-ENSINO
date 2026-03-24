@@ -114,12 +114,12 @@ export function AdminCourseStudentsTab({ courseId }: AdminCourseStudentsTabProps
   const handleCreateMigrationLink = async () => {
     setIsCreatingLink(true);
     try {
-      const response = await fetch('/api/admin/migration-links', {
+      const response = await fetch(`/api/admin/courses/${courseId}/migration-links`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          courseId,
-          ...migrationConfig
+          expiresAt: migrationConfig.expiresAt,
+          accessDurationDays: migrationConfig.accessDurationDays
         })
       });
       const data = await response.json();
