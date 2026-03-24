@@ -45,6 +45,11 @@ export interface LiveChatMessage {
   isDeleted?: boolean; // Para moderação (apagar mensagem)
   isAdmin?: boolean;
   isEdited?: boolean;
+  replyTo?: {
+    id: string;
+    userName: string;
+    text: string;
+  } | null;
 }
 
 export interface LiveActiveUser {

@@ -89,7 +89,10 @@ export const liveChatService = {
   deleteMessage: async (eventId: string, messageId: string): Promise<void> => {
     try {
       const docRef = doc(db, CHAT_COLLECTION, eventId, 'messages', messageId);
-      await deleteDoc(docRef); // Substituído updateDoc por deleteDoc (Hard Delete)
+      await updateDoc(docRef, {
+        isDeleted: true,
+        text: '🚫 Mensagem apagada pelo usuário'
+      });
     } catch (error) {
       console.error("Error deleting chat message:", error);
       throw error;
