@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import { 
   createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword 
+  signInWithEmailAndPassword,
+  signOut
 } from 'firebase/auth';
 import { 
   doc, 
@@ -124,6 +125,9 @@ export default function MigrationEnrollment() {
 
       await setDoc(doc(db, 'users', user.uid), userDoc);
       
+      // Deslogar para garantir que a nova aba peça login
+      await signOut(auth);
+      
       setSuccess(true);
       toast.success('Conta criada e acesso liberado!');
     } catch (err: any) {
@@ -158,6 +162,9 @@ export default function MigrationEnrollment() {
           enrollmentType: 'MIGRACAO'
         })
       });
+
+      // Deslogar para garantir que a nova aba peça login
+      await signOut(auth);
 
       setSuccess(true);
       toast.success('Acesso liberado com sucesso!');
@@ -213,13 +220,15 @@ export default function MigrationEnrollment() {
             <p className="text-zinc-400 text-sm">O curso <strong>{linkData.courseName}</strong> já está disponível no seu painel.</p>
           </div>
           <div className="pt-4">
-            <button 
-              onClick={() => navigate('/app/metas')}
+            <a 
+              href="/#/login" 
+              target="_blank" 
+              rel="noopener noreferrer"
               className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2"
             >
               Acessar Plataforma
               <ArrowRight size={20} />
-            </button>
+            </a>
           </div>
         </div>
       </div>
