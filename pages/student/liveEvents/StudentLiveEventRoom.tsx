@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, VideoOff, FileText } from 'lucide-react';
+import { ArrowLeft, Users, VideoOff, FileText, ShieldAlert } from 'lucide-react';
 import { doc, onSnapshot, getDoc, collection } from 'firebase/firestore';
 import { db } from '../../../services/firebase';
 import { LiveEvent, LiveActiveUser } from '../../../types/liveEvent';
@@ -10,6 +10,7 @@ import { StudentLiveWaitingRoom } from '../../../components/student/lives/room/S
 import { AdminLivePlayer } from '../../../components/admin/liveEvents/room/AdminLivePlayer';
 import { StudentLiveRecording } from '../../../components/student/lives/room/StudentLiveRecording';
 import { joinLiveEvent, leaveLiveEvent } from '../../../services/liveChatService';
+import toast from 'react-hot-toast';
 
 export const StudentLiveEventRoom: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
@@ -20,6 +21,7 @@ export const StudentLiveEventRoom: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [userIsolatedProducts, setUserIsolatedProducts] = useState<string[]>([]);
   const [viewerCount, setViewerCount] = useState(0);
+  const [isChatBlocked, setIsChatBlocked] = useState(false);
 
   const formatShortName = (fullName?: string | null) => {
     if (!fullName) return 'Aluno';
@@ -61,6 +63,34 @@ export const StudentLiveEventRoom: React.FC = () => {
 
     return () => unsubscribe();
   }, [eventId]);
+
+  // Listener de Moderação em Tempo Real (Banimento e Bloqueio de Chat)
+  useEffect(() => {
+    if (!eventId || !currentUser) return;
+
+    const myPresenceRef = doc(db, 'live_events', eventId, 'presence', currentUser.uid);
+    const unsubscribe = onSnapshot(myPresenceRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        
+        // Bloqueio de Chat
+        setIsChatBlocked(!!data.isChatBlocked);
+
+        // Banimento
+        if (data.isBanned) {
+          toast.error("Você foi removido deste evento pelo administrador.", {
+            icon: <ShieldAlert className="text-red-500" />,
+            duration: 5000
+          });
+          navigate('/app/eventos-ao-vivo');
+        }
+      }
+    }, (error) => {
+      console.error("Error listening to personal presence:", error);
+    });
+
+    return () => unsubscribe();
+  }, [eventId, currentUser, navigate]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -238,7 +268,11 @@ export const StudentLiveEventRoom: React.FC = () => {
         {/* Right Column: Chat */}
         <div className="w-full lg:w-1/3 xl:w-1/4 bg-zinc-950 flex flex-col flex-1 lg:h-auto border-t lg:border-t-0 lg:border-l border-zinc-800 overflow-hidden">
           {event.isChatEnabled ? (
-            <StudentLiveChat eventId={event.id} status={event.status} />
+            <StudentLiveChat 
+              eventId={event.id} 
+              status={event.status} 
+              isChatBlocked={isChatBlocked} 
+            />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
               <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center mb-4">

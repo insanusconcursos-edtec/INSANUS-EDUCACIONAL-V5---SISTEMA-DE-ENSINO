@@ -8,9 +8,10 @@ import toast from 'react-hot-toast';
 interface StudentLiveChatProps {
   eventId: string;
   status: 'scheduled' | 'live' | 'ended';
+  isChatBlocked?: boolean;
 }
 
-export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, status }) => {
+export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, status, isChatBlocked }) => {
   const { currentUser, userData } = useAuth();
   const [messages, setMessages] = useState<LiveChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -44,7 +45,7 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !currentUser || isSending || status !== 'live') return;
+    if (!newMessage.trim() || !currentUser || isSending || status !== 'live' || isChatBlocked) return;
 
     setIsSending(true);
     try {
@@ -59,9 +60,13 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
         isAdmin: false
       });
       setNewMessage('');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending message:", error);
-      toast.error("Erro ao enviar mensagem.");
+      if (error.message === 'Usuário bloqueado') {
+        toast.error("Seu chat foi bloqueado pelo administrador.");
+      } else {
+        toast.error("Erro ao enviar mensagem.");
+      }
     } finally {
       setIsSending(false);
     }
@@ -147,13 +152,19 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            placeholder={status === 'scheduled' ? "O chat será liberado quando o evento iniciar" : "Digite sua mensagem..."}
-            disabled={status !== 'live' || isSending}
+            placeholder={
+              isChatBlocked 
+                ? "Seu chat foi bloqueado pelo administrador." 
+                : status === 'scheduled' 
+                  ? "O chat será liberado quando o evento iniciar" 
+                  : "Digite sua mensagem..."
+            }
+            disabled={status !== 'live' || isSending || isChatBlocked}
             className="flex-1 bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-red transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <button 
             type="submit"
-            disabled={!newMessage.trim() || isSending || status !== 'live'} 
+            disabled={!newMessage.trim() || isSending || status !== 'live' || isChatBlocked} 
             className="px-3 py-2 bg-brand-red hover:bg-red-700 text-white font-bold rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0"
           >
             <Send size={16} />

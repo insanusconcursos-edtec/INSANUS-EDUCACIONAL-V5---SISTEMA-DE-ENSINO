@@ -5,6 +5,7 @@ import {
   setDoc,
   updateDoc, 
   deleteDoc,
+  getDoc,
   query, 
   orderBy, 
   onSnapshot, 
@@ -51,6 +52,17 @@ export const liveChatService = {
 
   sendMessage: async (eventId: string, messageData: Omit<LiveChatMessage, 'id' | 'eventId' | 'createdAt'>): Promise<string> => {
     try {
+      // Trava de Segurança: Verifica se o usuário está bloqueado ou banido antes de enviar
+      const presenceRef = doc(db, EVENTS_COLLECTION, eventId, 'presence', messageData.userId);
+      const presenceSnap = await getDoc(presenceRef);
+      
+      if (presenceSnap.exists()) {
+        const pData = presenceSnap.data();
+        if (pData.isChatBlocked || pData.isBanned) {
+          throw new Error('Usuário bloqueado');
+        }
+      }
+
       // Blindagem: Remove qualquer chave cujo valor seja estritamente 'undefined'
       const sanitizedData = Object.fromEntries(
         Object.entries(messageData).filter(([_, v]) => v !== undefined)
@@ -159,16 +171,30 @@ export const liveChatService = {
 export const joinLiveEvent = async (eventId: string, user: { uid: string, name: string, email: string, photoUrl?: string }) => {
   if (!user.uid) return;
   const presenceRef = doc(db, `live_events/${eventId}/presence`, user.uid);
-  await setDoc(presenceRef, {
+  
+  // Busca status atual para não sobrescrever punições (Bloqueio/Banimento)
+  const docSnap = await getDoc(presenceRef);
+  
+  const baseData = {
     userId: user.uid,
     eventId: eventId,
     userName: user.name || 'Aluno',
     userEmail: user.email || '',
     userPhoto: user.photoUrl || '',
-    joinedAt: new Date().toISOString(),
-    isChatBlocked: false,
-    isBanned: false
-  });
+    joinedAt: new Date().toISOString()
+  };
+
+  if (docSnap.exists()) {
+    // Se já existe, apenas atualiza dados básicos sem tocar nos campos de moderação
+    await updateDoc(presenceRef, baseData);
+  } else {
+    // Se é novo, define os padrões
+    await setDoc(presenceRef, {
+      ...baseData,
+      isChatBlocked: false,
+      isBanned: false
+    });
+  }
 };
 
 export const leaveLiveEvent = async (eventId: string, userId: string) => {
