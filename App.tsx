@@ -54,7 +54,7 @@ const App: React.FC = () => {
       <Toaster position="top-right" />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/migracao/:linkId" element={<MigrationEnrollment />} />
+        <Route path="/migracao/:token" element={<MigrationEnrollment />} />
         
         {/* Admin Routes */}
         <Route path="/admin/eventos-ao-vivo/sala/:id" element={

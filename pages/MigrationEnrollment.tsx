@@ -1,16 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { UserPlus, LogIn, CheckCircle2, AlertCircle, Loader2, Mail, Lock, User, CreditCard, Phone } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { 
+  UserPlus, 
+  LogIn, 
+  CheckCircle2, 
+  AlertCircle, 
+  Loader2, 
+  Mail, 
+  Lock, 
+  User, 
+  CreditCard, 
+  Phone,
+  ArrowRight
+} from 'lucide-react';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword 
+} from 'firebase/auth';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  arrayUnion, 
+  serverTimestamp 
+} from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
 import toast from 'react-hot-toast';
 
 export default function MigrationEnrollment() {
-  const { linkId } = useParams<{ linkId: string }>();
+  const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
   const [linkData, setLinkData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [isLoginFlow, setIsLoginFlow] = useState(false);
+  const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -24,63 +50,124 @@ export default function MigrationEnrollment() {
 
   useEffect(() => {
     const validateLink = async () => {
+      if (!token) return;
       try {
-        const response = await fetch(`/api/migration/${linkId}`);
-        const data = await response.json();
-        if (data.success) {
-          setLinkData(data);
+        const docRef = doc(db, 'MigrationLinks', token);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          
+          // Verificar se está ativo
+          if (!data.active) {
+            setError('Este link de migração foi desativado.');
+            return;
+          }
+
+          // Verificar expiração
+          if (data.expiresAt && new Date(data.expiresAt) < new Date()) {
+            setError('Este link de migração expirou.');
+            return;
+          }
+
+          setLinkData({ id: docSnap.id, ...data });
         } else {
-          setError(data.error || 'Link inválido ou expirado.');
+          setError('Link de migração inválido.');
         }
-      } catch (_err) {
-        setError('Erro ao validar link.');
+      } catch (err) {
+        console.error('Erro ao validar link:', err);
+        setError('Erro ao validar link de migração.');
       } finally {
         setLoading(false);
       }
     };
     validateLink();
-  }, [linkId]);
+  }, [token]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isLoginFlow) {
-      if (formData.email !== formData.confirmEmail) {
-        return toast.error('Os e-mails não coincidem.');
-      }
-      if (formData.password !== formData.confirmPassword) {
-        return toast.error('As senhas não coincidem.');
-      }
-      if (formData.password.length < 6) {
-        return toast.error('A senha deve ter pelo menos 6 caracteres.');
-      }
+    if (formData.email !== formData.confirmEmail) {
+      return toast.error('Os e-mails não coincidem.');
+    }
+    if (formData.password !== formData.confirmPassword) {
+      return toast.error('As senhas não coincidem.');
+    }
+    if (formData.password.length < 6) {
+      return toast.error('A senha deve ter pelo menos 6 caracteres.');
     }
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`/api/migration/${linkId}/enroll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          isLoginOnly: isLoginFlow
+      // 1. Criar usuário no Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      const user = userCredential.user;
+
+      // 2. Criar documento do usuário no Firestore
+      const userDoc = {
+        uid: user.uid,
+        name: formData.name,
+        email: formData.email,
+        cpf: formData.cpf,
+        phone: formData.phone,
+        role: 'student',
+        createdAt: serverTimestamp(),
+        access: [
+          {
+            type: 'course',
+            targetId: linkData.courseId,
+            isActive: true,
+            enrollmentType: 'MIGRACAO'
+          }
+        ]
+      };
+
+      await setDoc(doc(db, 'users', user.uid), userDoc);
+      
+      setSuccess(true);
+      toast.success('Conta criada e acesso liberado!');
+    } catch (err: any) {
+      console.error('Erro no cadastro:', err);
+      if (err.code === 'auth/email-already-in-use') {
+        toast.error('Este e-mail já está em uso. Tente fazer login.');
+        setActiveTab('login');
+      } else {
+        toast.error('Erro ao criar conta. Tente novamente.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    try {
+      // 1. Login no Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      const user = userCredential.user;
+
+      // 2. Atualizar documento do usuário com o novo curso
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        access: arrayUnion({
+          type: 'course',
+          targetId: linkData.courseId,
+          isActive: true,
+          enrollmentType: 'MIGRACAO'
         })
       });
 
-      const data = await response.json();
-
-      if (response.status === 409) {
-        // Usuário já existe
-        setIsLoginFlow(true);
-        toast.error('Este e-mail já está cadastrado. Por favor, faça login para vincular sua conta.');
-      } else if (data.success) {
-        setSuccess(true);
-        toast.success('Inscrição realizada com sucesso!');
+      setSuccess(true);
+      toast.success('Acesso liberado com sucesso!');
+    } catch (err: any) {
+      console.error('Erro no login:', err);
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        toast.error('E-mail ou senha incorretos.');
       } else {
-        toast.error(data.error || 'Erro ao processar inscrição.');
+        toast.error('Erro ao realizar login. Tente novamente.');
       }
-    } catch (_err) {
-      toast.error('Erro de conexão.');
     } finally {
       setIsSubmitting(false);
     }
@@ -105,10 +192,15 @@ export default function MigrationEnrollment() {
             <AlertCircle size={32} />
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Ops! Algo deu errado</h2>
+            <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Link Inválido</h2>
             <p className="text-zinc-500 text-sm">{error}</p>
           </div>
-          <p className="text-zinc-600 text-[10px] uppercase font-bold tracking-widest">Entre em contato com o suporte se acreditar que isso é um erro.</p>
+          <button 
+            onClick={() => navigate('/login')}
+            className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase tracking-widest rounded-xl transition-all"
+          >
+            Voltar para Login
+          </button>
         </div>
       </div>
     );
@@ -122,17 +214,18 @@ export default function MigrationEnrollment() {
             <CheckCircle2 size={48} />
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Migração Concluída!</h2>
-            <p className="text-emerald-400 font-bold text-sm">Cadastro migrado com sucesso!</p>
-            <p className="text-zinc-400 text-sm">Seu acesso já está liberado na nova plataforma. Você já pode fechar esta janela ou fazer login no portal do aluno.</p>
+            <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Tudo Pronto!</h2>
+            <p className="text-emerald-400 font-bold text-sm">Acesso liberado com sucesso.</p>
+            <p className="text-zinc-400 text-sm">O curso <strong>{linkData.courseName}</strong> já está disponível no seu painel.</p>
           </div>
           <div className="pt-4">
-            <a 
-              href="/login" 
-              className="inline-block w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-900/20"
+            <button 
+              onClick={() => navigate('/app/metas')}
+              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2"
             >
-              Ir para o Portal
-            </a>
+              Acessar Plataforma
+              <ArrowRight size={20} />
+            </button>
           </div>
         </div>
       </div>
@@ -140,10 +233,10 @@ export default function MigrationEnrollment() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 py-12">
       <div className="max-w-xl w-full bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="p-8 bg-zinc-950/50 border-b border-zinc-800 text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 text-blue-500 rounded-full text-[10px] font-black uppercase tracking-widest mb-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 text-red-500 rounded-full text-[10px] font-black uppercase tracking-widest mb-2">
             Migração de Aluno
           </div>
           <h1 className="text-3xl font-black text-white uppercase tracking-tighter leading-none">
@@ -152,38 +245,38 @@ export default function MigrationEnrollment() {
           <p className="text-zinc-500 text-sm">Complete seus dados para liberar seu acesso imediato.</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
-          {isLoginFlow ? (
-            <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
-              <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex gap-3">
-                <AlertCircle className="text-blue-500 shrink-0" size={20} />
-                <p className="text-zinc-400 text-xs">Identificamos que você já possui uma conta. Insira sua senha para vincular este curso ao seu perfil.</p>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
-                  <input 
-                    type="email"
-                    readOnly
-                    value={formData.email}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-zinc-500 focus:outline-none"
-                  />
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
-                  <input 
-                    type="password"
-                    required
-                    placeholder="Sua Senha"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-600 transition-all"
-                  />
-                </div>
-              </div>
+        {/* Tabs */}
+        <div className="flex border-b border-zinc-800">
+          <button
+            onClick={() => setActiveTab('register')}
+            className={`flex-1 py-4 text-xs font-black uppercase tracking-widest transition-all ${
+              activeTab === 'register' 
+                ? 'text-red-500 border-b-2 border-red-500 bg-red-500/5' 
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <UserPlus size={16} />
+              Criar Conta
             </div>
-          ) : (
+          </button>
+          <button
+            onClick={() => setActiveTab('login')}
+            className={`flex-1 py-4 text-xs font-black uppercase tracking-widest transition-all ${
+              activeTab === 'login' 
+                ? 'text-red-500 border-b-2 border-red-500 bg-red-500/5' 
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <LogIn size={16} />
+              Já tenho conta
+            </div>
+          </button>
+        </div>
+
+        <form onSubmit={activeTab === 'register' ? handleRegister : handleLogin} className="p-8 space-y-6">
+          {activeTab === 'register' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-left-4 duration-300">
               <div className="md:col-span-2 relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
@@ -269,6 +362,31 @@ export default function MigrationEnrollment() {
                 />
               </div>
             </div>
+          ) : (
+            <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
+                <input 
+                  type="email"
+                  required
+                  placeholder="Seu E-mail"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-600 transition-all"
+                />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
+                <input 
+                  type="password"
+                  required
+                  placeholder="Sua Senha"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-600 transition-all"
+                />
+              </div>
+            </div>
           )}
 
           <button
@@ -278,15 +396,15 @@ export default function MigrationEnrollment() {
           >
             {isSubmitting ? (
               <Loader2 className="animate-spin" size={20} />
-            ) : isLoginFlow ? (
-              <>
-                <LogIn size={20} />
-                Vincular e Liberar Acesso
-              </>
-            ) : (
+            ) : activeTab === 'register' ? (
               <>
                 <UserPlus size={20} />
                 Concluir Cadastro e Liberar Acesso
+              </>
+            ) : (
+              <>
+                <LogIn size={20} />
+                Entrar e Liberar Acesso
               </>
             )}
           </button>
@@ -299,3 +417,4 @@ export default function MigrationEnrollment() {
     </div>
   );
 }
+
