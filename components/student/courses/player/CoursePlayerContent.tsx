@@ -4,6 +4,7 @@ import { CourseLesson, CourseContent } from '../../../../types/course';
 import { courseService } from '../../../../services/courseService';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { openWatermarkedPdf } from '../../../../utils/pdfSecurityService';
+import { AlternativeYouTubePlayer } from '../../../shared/AlternativeYouTubePlayer';
 
 interface CoursePlayerContentProps {
   lesson: CourseLesson;
@@ -81,13 +82,9 @@ export function CoursePlayerContent({ lesson }: CoursePlayerContentProps) {
                     <div key={item.id} className="w-full bg-[#0a0c10] border-b border-gray-900 shadow-2xl relative z-10 py-6 md:py-10 px-4 md:px-10">
                         <div className="w-full max-w-4xl aspect-video mx-auto rounded-xl overflow-hidden border border-gray-800 shadow-[0_0_50px_rgba(0,0,0,0.5)]"> 
                             {item.videoPlatform === 'youtube' ? (
-                                <iframe 
-                                    src={`https://www.youtube.com/embed/${getYouTubeID(item.videoUrl || '')}?modestbranding=1&rel=0&showinfo=0`}
-                                    className="w-full h-full" 
-                                    frameBorder="0" 
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                    allowFullScreen
-                                />
+                                <div className="w-full h-full bg-black">
+                                    <AlternativeYouTubePlayer videoId={getYouTubeID(item.videoUrl || '') || ''} />
+                                </div>
                             ) : (
                                 <iframe src={item.videoUrl} className="w-full h-full" frameBorder="0" allowFullScreen />
                             )}

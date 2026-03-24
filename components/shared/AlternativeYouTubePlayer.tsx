@@ -59,7 +59,7 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
   const [volume, setVolume] = useState(100);
   const [isMuted, setIsMuted] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const [hasInteracted, setHasInteracted] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
@@ -107,6 +107,7 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
 
       playerRef.current = new window.YT.Player(targetDiv, {
         videoId,
+        host: 'https://www.youtube.com',
         playerVars: {
           controls: 0,
           disablekb: 1,
@@ -115,6 +116,8 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
           showinfo: 0,
           iv_load_policy: 3,
           enablejsapi: 1,
+          autoplay: 0,
+          mute: 0,
           origin: window.location.origin,
           widget_referrer: window.location.origin,
         },
@@ -122,13 +125,19 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
           onReady: (event) => {
             setIsReady(true);
             isInitializing.current = false;
-            setVolume(event.target.getVolume() || 100);
+            const initialVolume = event.target.getVolume() || 100;
+            setVolume(initialVolume);
+            // Sincroniza o volume inicial
+            if (typeof event.target.setVolume === 'function') {
+              event.target.setVolume(volume);
+            }
           },
           onStateChange: (event) => {
-            if (event.data === window.YT.PlayerState.PLAYING) {
+            const { PLAYING, PAUSED, ENDED, BUFFERING } = window.YT.PlayerState;
+            if (event.data === PLAYING || event.data === BUFFERING) {
               setIsPlaying(true);
-              setHasInteracted(true); // O navegador já validou o gesto! Podemos ativar o nosso escudo.
-            } else if (event.data === window.YT.PlayerState.PAUSED || event.data === window.YT.PlayerState.ENDED) {
+              if (!hasStarted) setHasStarted(true); 
+            } else if (event.data === PAUSED || event.data === ENDED) {
               setIsPlaying(false);
             }
           },
@@ -165,7 +174,7 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
       }
       isInitializing.current = false;
       setIsReady(false);
-      setHasInteracted(false); // Reset interaction state for new video
+      setHasStarted(false); // Reset interaction state for new video
     };
   }, [videoId]);
 
@@ -189,19 +198,39 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
   const togglePlay = () => {
     if (!playerRef.current || !isReady) return;
     
+    const player = playerRef.current;
+
     try {
-      const state = playerRef.current.getPlayerState();
+      const state = typeof player.getPlayerState === 'function' ? player.getPlayerState() : -1;
+      
       if (state === window.YT.PlayerState.PLAYING) {
-        playerRef.current.pauseVideo();
+        player.pauseVideo();
       } else {
-        playerRef.current.playVideo();
+        // Se for o primeiro play (embora os controles estejam ocultos até o hasStarted ser true),
+        // mantemos a lógica robusta de inicialização.
+        if (!hasStarted) {
+          if (typeof player.mute === 'function') player.mute();
+          if (typeof player.playVideo === 'function') player.playVideo();
+          
+          // A transição de hasStarted agora é delegada ao onStateChange para maior precisão
+          
+          setTimeout(() => {
+            if (playerRef.current) {
+              const p = playerRef.current;
+              if (typeof p.unMute === 'function') p.unMute();
+              if (typeof p.setVolume === 'function') p.setVolume(volume);
+            }
+          }, 300);
+        } else {
+          if (typeof player.playVideo === 'function') player.playVideo();
+        }
       }
-    } catch {
-      // Fallback caso o estado não possa ser lido
+    } catch (error) {
+      console.error("Error toggling play state:", error);
       if (isPlaying) {
-        playerRef.current.pauseVideo();
+        if (typeof player.pauseVideo === 'function') player.pauseVideo();
       } else {
-        playerRef.current.playVideo();
+        if (typeof player.playVideo === 'function') player.playVideo();
       }
     }
   };
@@ -250,11 +279,16 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-black rounded-lg overflow-hidden group">
+    <div 
+      ref={containerRef} 
+      className="relative w-full h-full bg-black rounded-lg overflow-hidden group"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       
       {/* O Iframe do YouTube Isolado e Protegido */}
-      {/* REMOVIDO o pointer-events-none daqui para permitir o clique inicial */}
-      <div className="absolute inset-0">
+      <div 
+        className={`absolute inset-0 ${hasStarted ? 'pointer-events-none' : ''}`}
+      >
         {/* Utilizamos dangerouslySetInnerHTML={{ __html: '' }} para proibir o React de re-renderizar ou limpar o conteúdo desta div após o YouTube injetar o Iframe */}
         <div 
           ref={wrapperRef}
@@ -264,67 +298,78 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
         />
       </div>
 
-      {/* O ESCUDO INTELIGENTE (Smart Glass Shield) */}
-      {/* Se ainda não interagiu, o escudo tem pointer-events-none (deixa o clique passar para o YouTube).
-          Se já interagiu (hasInteracted), o escudo ganha pointer-events-auto e bloqueia o ecrã, permitindo apenas os nossos botões. */}
-      <div 
-        className={`absolute inset-0 z-10 ${hasInteracted ? 'cursor-pointer pointer-events-auto' : 'pointer-events-none'}`} 
-        onClick={() => {
-          if (hasInteracted && isReady) togglePlay();
-        }}
-        onContextMenu={(e) => e.preventDefault()}
-      ></div>
+      {/* Escudos parciais ativos ANTES do vídeo começar */}
+      {!hasStarted && (
+        <>
+          {/* Escudo Topo (Cobre a metade de cima, até o limite superior do botão play) */}
+          <div className="absolute top-0 left-0 w-full h-[calc(50%-24px)] z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+          
+          {/* Escudo Base (Cobre a metade de baixo, até o limite inferior do botão play) */}
+          <div className="absolute bottom-0 left-0 w-full h-[calc(50%-24px)] z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+          
+          {/* Escudo Esquerdo (Cobre a lateral esquerda, alinhado com a altura do botão play) */}
+          <div className="absolute top-[calc(50%-24px)] left-0 w-[calc(50%-34px)] h-[48px] z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+          
+          {/* Escudo Direito (Cobre a lateral direita, alinhado com a altura do botão play) */}
+          <div className="absolute top-[calc(50%-24px)] right-0 w-[calc(50%-34px)] h-[48px] z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+        </>
+      )}
 
-      {/* Barra de Controlos Customizada */}
-      {/* Os controlos só aparecem e ficam clicáveis APÓS a primeira interação no player nativo */}
-      <div className={`absolute bottom-0 left-0 right-0 z-20 p-4 bg-gradient-to-t from-black/90 to-transparent transition-opacity duration-300 flex flex-col justify-end gap-2 ${isReady && hasInteracted ? 'opacity-0 group-hover:opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-        
-        {/* NOVA BARRA DE PROGRESSO */}
-        <div className="w-full flex items-center gap-3">
-          <span className="text-xs text-white font-medium min-w-[40px] text-right">{formatTime(currentTime)}</span>
-          <input
-            type="range"
-            min={0}
-            max={duration || 100}
-            value={currentTime}
-            onMouseDown={handleSeekMouseDown}
-            onTouchStart={handleSeekMouseDown}
-            onChange={handleSeekChange}
-            onMouseUp={handleSeekMouseUp}
-            onTouchEnd={handleSeekMouseUp}
-            className="flex-1 h-1.5 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-red-600 hover:h-2 transition-all"
-          />
-          <span className="text-xs text-gray-400 font-medium min-w-[40px]">{formatTime(duration)}</span>
-        </div>
+      {/* Barra de Controlos Customizada - Oculta até o vídeo começar */}
+      {hasStarted && (
+        <div className={`absolute bottom-0 left-0 right-0 z-20 p-4 bg-gradient-to-t from-black/90 to-transparent transition-opacity duration-300 flex flex-col justify-end gap-2 ${
+          isReady 
+            ? 'opacity-0 group-hover:opacity-100 pointer-events-auto' 
+            : 'opacity-0 pointer-events-none'
+        }`}>
+          
+          {/* NOVA BARRA DE PROGRESSO */}
+          <div className="w-full flex items-center gap-3">
+            <span className="text-xs text-white font-medium min-w-[40px] text-right">{formatTime(currentTime)}</span>
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              value={currentTime}
+              onMouseDown={handleSeekMouseDown}
+              onTouchStart={handleSeekMouseDown}
+              onChange={handleSeekChange}
+              onMouseUp={handleSeekMouseUp}
+              onTouchEnd={handleSeekMouseUp}
+              className="flex-1 h-1.5 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-red-600 hover:h-2 transition-all"
+            />
+            <span className="text-xs text-gray-400 font-medium min-w-[40px]">{formatTime(duration)}</span>
+          </div>
 
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-4">
-            <button onClick={togglePlay} className="text-white hover:text-red-500 transition">
-              {isPlaying ? <Pause size={24} /> : <Play size={24} fill="currentColor" />}
-            </button>
-            
-            <div className="flex items-center gap-2">
-              <button onClick={toggleMute} className="text-white hover:text-red-500 transition">
-                {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-4">
+              <button onClick={togglePlay} className="text-white hover:text-red-500 transition">
+                {isPlaying ? <Pause size={24} /> : <Play size={24} fill="currentColor" />}
               </button>
-              <input 
-                type="range" min="0" max="100" value={isMuted ? 0 : volume} onChange={handleVolumeChange}
-                className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
-              />
+              
+              <div className="flex items-center gap-2">
+                <button onClick={toggleMute} className="text-white hover:text-red-500 transition">
+                  {isMuted || volume === 0 ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                </button>
+                <input 
+                  type="range" min="0" max="100" value={isMuted ? 0 : volume} onChange={handleVolumeChange}
+                  className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
-              <span className="text-white text-xs font-bold uppercase">Ao Vivo</span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+                <span className="text-white text-xs font-bold uppercase">Ao Vivo</span>
+              </div>
+              <button onClick={toggleFullScreen} className="text-white hover:text-red-500 transition">
+                <Maximize size={20} />
+              </button>
             </div>
-            <button onClick={toggleFullScreen} className="text-white hover:text-red-500 transition">
-              <Maximize size={20} />
-            </button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

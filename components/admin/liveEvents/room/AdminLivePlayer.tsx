@@ -1,6 +1,6 @@
 import React from 'react';
 import { LiveEvent } from '../../../../types/liveEvent';
-import { AlternativeYouTubePlayer } from './AlternativeYouTubePlayer';
+import { AlternativeYouTubePlayer } from '../../../shared/AlternativeYouTubePlayer';
 
 interface AdminLivePlayerProps {
   event: LiveEvent;
