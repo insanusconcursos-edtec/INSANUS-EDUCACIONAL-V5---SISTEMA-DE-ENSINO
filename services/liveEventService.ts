@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { LiveEvent, LiveEventMaterial, LiveEventChatMessage } from '../types/liveEvent';
@@ -13,7 +13,6 @@ export const liveEventService = {
   },
 
   getLiveEventById: async (id: string): Promise<LiveEvent | null> => {
-    const { getDoc } = await import('firebase/firestore');
     const docRef = doc(db, COLLECTION_NAME, id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
@@ -125,7 +124,6 @@ export const liveEventService = {
         console.error("Error deleting material from storage:", e);
       }
 
-      const { getDoc } = await import('firebase/firestore');
       const docRef = doc(db, COLLECTION_NAME, eventId);
       const docSnap = await getDoc(docRef);
       

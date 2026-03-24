@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Trash2, ShieldAlert, Edit2, Check, X } from 'lucide-react';
+import { Send, Trash2, ShieldAlert, Edit2, Check, X, Smile } from 'lucide-react';
 import { liveChatService } from '../../../../services/liveChatService';
 import { LiveChatMessage } from '../../../../types/liveEvent';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { ConfirmationModal } from '../../ui/ConfirmationModal';
 import toast from 'react-hot-toast';
+import EmojiPicker, { Theme, EmojiClickData } from 'emoji-picker-react';
 
 interface AdminLiveChatProps {
   eventId: string;
@@ -16,11 +17,13 @@ export const AdminLiveChat: React.FC<AdminLiveChatProps> = ({ eventId }) => {
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [messageToDelete, setMessageToDelete] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const formatShortName = (fullName?: string | null) => {
     if (!fullName) return 'Administrador';
@@ -59,8 +62,8 @@ export const AdminLiveChat: React.FC<AdminLiveChatProps> = ({ eventId }) => {
     }, 100);
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
     if (!newMessage.trim() || !currentUser || isSending) return;
 
     setIsSending(true);
@@ -76,12 +79,46 @@ export const AdminLiveChat: React.FC<AdminLiveChatProps> = ({ eventId }) => {
         isAdmin: true
       });
       setNewMessage('');
+      setShowEmojiPicker(false);
     } catch (error) {
       console.error("Error sending message:", error);
       toast.error("Erro ao enviar mensagem.");
     } finally {
       setIsSending(false);
+      // Recupera o foco após re-ativar o input
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.style.height = 'auto';
+        }
+      }, 0);
     }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewMessage(e.target.value);
+    // Magia do auto-resize: reseta para auto e depois pega a altura real
+    e.target.style.height = 'auto';
+    e.target.style.height = `${e.target.scrollHeight}px`;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter sem Shift envia a mensagem
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); // Evita quebra de linha extra
+      if (newMessage.trim() !== '' && !isSending) {
+        handleSendMessage(); 
+      }
+    }
+    // Shift + Enter o comportamento nativo (quebrar linha) atua normalmente
+  };
+
+  const onEmojiClick = (emojiData: EmojiClickData) => {
+    setNewMessage(prev => prev + emojiData.emoji);
+    // Não fecha o picker para permitir múltiplos emojis, mas foca no input
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
   };
 
   const handleDeleteMessage = async () => {
@@ -210,23 +247,49 @@ export const AdminLiveChat: React.FC<AdminLiveChatProps> = ({ eventId }) => {
       </div>
 
       {/* Input Area */}
-      <div className="p-3 bg-zinc-900 border-t border-zinc-800 shrink-0">
-        <form onSubmit={handleSendMessage} className="flex gap-2">
-          <input
-            type="text"
+      <div className="p-3 bg-zinc-900 border-t border-zinc-800 shrink-0 relative">
+        {showEmojiPicker && (
+          <div className="absolute bottom-20 left-4 z-50 shadow-2xl">
+            <EmojiPicker 
+              theme={Theme.DARK}
+              onEmojiClick={onEmojiClick}
+              width={320}
+              height={400}
+            />
+          </div>
+        )}
+        <div className="relative flex items-end gap-2 p-2 bg-black border border-zinc-800 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className={`p-2 transition-colors flex items-center justify-center shrink-0 ${
+              showEmojiPicker ? 'text-red-500' : 'text-zinc-400 hover:text-white'
+            }`}
+            title="Inserir Emoji"
+          >
+            <Smile size={24} />
+          </button>
+
+          <textarea
+            ref={inputRef}
+            rows={1}
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
             placeholder="Enviar como moderador..."
-            className="flex-1 bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
+            className="flex-1 bg-transparent border-none focus:ring-0 px-1 py-2 text-sm text-white placeholder:text-zinc-600 resize-none overflow-y-auto max-h-24 focus:outline-none"
           />
+
           <button 
             type="submit"
+            onClick={(e) => handleSendMessage(e)}
             disabled={!newMessage.trim() || isSending} 
-            className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0"
+            className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0"
+            title="Enviar mensagem"
           >
-            <Send size={16} />
+            <Send size={20} />
           </button>
-        </form>
+        </div>
       </div>
 
       {/* Modals */}

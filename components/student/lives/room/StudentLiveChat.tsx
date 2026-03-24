@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Trash2, MessageCircle } from 'lucide-react';
+import { Send, Trash2, MessageCircle, Smile } from 'lucide-react';
 import { liveChatService } from '../../../../services/liveChatService';
 import { LiveChatMessage } from '../../../../types/liveEvent';
 import { useAuth } from '../../../../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import EmojiPicker, { Theme, EmojiClickData } from 'emoji-picker-react';
 
 interface StudentLiveChatProps {
   eventId: string;
@@ -16,7 +17,9 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
   const [messages, setMessages] = useState<LiveChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const formatShortName = (fullName?: string | null) => {
     if (!fullName) return 'Aluno';
@@ -43,8 +46,8 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
     }, 100);
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e) e.preventDefault();
     if (!newMessage.trim() || !currentUser || isSending || status !== 'live' || isChatBlocked) return;
 
     setIsSending(true);
@@ -60,16 +63,51 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
         isAdmin: false
       });
       setNewMessage('');
-    } catch (error: any) {
+      setShowEmojiPicker(false);
+    } catch (error: unknown) {
       console.error("Error sending message:", error);
-      if (error.message === 'Usuário bloqueado') {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage === 'Usuário bloqueado') {
         toast.error("Seu chat foi bloqueado pelo administrador.");
       } else {
         toast.error("Erro ao enviar mensagem.");
       }
     } finally {
       setIsSending(false);
+      // Recupera o foco após re-ativar o input
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.style.height = 'auto';
+        }
+      }, 0);
     }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewMessage(e.target.value);
+    // Magia do auto-resize: reseta para auto e depois pega a altura real
+    e.target.style.height = 'auto';
+    e.target.style.height = `${e.target.scrollHeight}px`;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter sem Shift envia a mensagem
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); // Evita quebra de linha extra
+      if (newMessage.trim() !== '' && !isSending && status === 'live' && !isChatBlocked) {
+        handleSendMessage(); 
+      }
+    }
+    // Shift + Enter o comportamento nativo (quebrar linha) atua normalmente
+  };
+
+  const onEmojiClick = (emojiData: EmojiClickData) => {
+    setNewMessage(prev => prev + emojiData.emoji);
+    // Não fecha o picker para permitir múltiplos emojis, mas foca no input
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
   };
 
   const handleDeleteMessage = async (messageId: string) => {
@@ -128,11 +166,9 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
                 <div className={`max-w-[90%] rounded-2xl px-3 py-2 ${
                   msg.isDeleted 
                     ? 'bg-zinc-800/30 text-zinc-600 italic border border-zinc-800/50' 
-                    : isAdmin
-                      ? 'bg-red-600/10 border border-red-500/20 text-white'
-                      : isMine
-                        ? 'bg-brand-red/10 border border-brand-red/20 text-white'
-                        : 'bg-zinc-900 border border-zinc-800 text-zinc-200'
+                    : isMine
+                      ? 'bg-brand-red/10 border border-brand-red/20 text-white'
+                      : 'bg-zinc-800 border border-zinc-700 text-zinc-200'
                 }`}>
                   <p className="text-sm break-words">
                     {msg.isDeleted ? 'Mensagem apagada' : msg.text}
@@ -146,12 +182,36 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
       </div>
 
       {/* Input Area */}
-      <div className="p-3 bg-zinc-900 border-t border-zinc-800 shrink-0">
-        <form onSubmit={handleSendMessage} className="flex gap-2">
-          <input
-            type="text"
+      <div className="p-3 bg-zinc-900 border-t border-zinc-800 shrink-0 relative">
+        {showEmojiPicker && (
+          <div className="absolute bottom-20 left-4 z-50 shadow-2xl">
+            <EmojiPicker 
+              theme={Theme.DARK}
+              onEmojiClick={onEmojiClick}
+              width={320}
+              height={400}
+            />
+          </div>
+        )}
+        <div className="relative flex items-end gap-2 p-2 bg-black border border-zinc-800 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className={`p-2 transition-colors flex items-center justify-center shrink-0 ${
+              showEmojiPicker ? 'text-brand-red' : 'text-zinc-400 hover:text-white'
+            }`}
+            disabled={status !== 'live' || isChatBlocked}
+            title="Inserir Emoji"
+          >
+            <Smile size={24} />
+          </button>
+          
+          <textarea
+            ref={inputRef}
+            rows={1}
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
             placeholder={
               isChatBlocked 
                 ? "Seu chat foi bloqueado pelo administrador." 
@@ -160,16 +220,19 @@ export const StudentLiveChat: React.FC<StudentLiveChatProps> = ({ eventId, statu
                   : "Digite sua mensagem..."
             }
             disabled={status !== 'live' || isSending || isChatBlocked}
-            className="flex-1 bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-red transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-transparent border-none focus:ring-0 px-1 py-2 text-sm text-white placeholder:text-zinc-600 resize-none overflow-y-auto max-h-24 focus:outline-none"
           />
+
           <button 
             type="submit"
+            onClick={(e) => handleSendMessage(e)}
             disabled={!newMessage.trim() || isSending || status !== 'live' || isChatBlocked} 
-            className="px-3 py-2 bg-brand-red hover:bg-red-700 text-white font-bold rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0"
+            className="p-2 bg-brand-red hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0"
+            title="Enviar mensagem"
           >
-            <Send size={16} />
+            <Send size={20} />
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
