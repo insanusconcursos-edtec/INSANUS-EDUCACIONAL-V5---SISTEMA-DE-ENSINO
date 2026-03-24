@@ -124,9 +124,9 @@ const MetaManager: React.FC<MetaManagerProps> = ({ planId, discipline, topic, on
         </button>
         <div>
             <div className="flex items-center gap-2 mb-1">
-                <span className="text-[9px] font-black text-brand-red uppercase tracking-widest border border-brand-red/30 px-1.5 rounded">{discipline.name}</span>
+                <span className="text-[9px] font-black text-brand-red tracking-widest border border-brand-red/30 px-1.5 rounded">{discipline.name}</span>
             </div>
-            <h3 className="text-sm font-black text-white uppercase tracking-tighter flex items-center gap-2">
+            <h3 className="text-sm font-black text-white tracking-tighter flex items-center gap-2">
                 <Target size={16} className="text-zinc-500" />
                 {topic.name}
             </h3>
@@ -161,7 +161,7 @@ const MetaManager: React.FC<MetaManagerProps> = ({ planId, discipline, topic, on
         ) : metas.length === 0 ? (
              <div className="text-center py-20 opacity-50 flex flex-col items-center gap-3">
                 <Target size={32} className="text-zinc-700" />
-                <span className="text-[10px] uppercase font-bold text-zinc-600">Cadastre as metas deste assunto</span>
+                <span className="text-[10px] font-bold text-zinc-600">Cadastre as metas deste assunto</span>
              </div>
         ) : (
              metas.map((meta, index) => (

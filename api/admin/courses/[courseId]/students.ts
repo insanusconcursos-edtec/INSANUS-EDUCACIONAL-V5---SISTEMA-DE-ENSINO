@@ -31,7 +31,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Captura o ID do curso vindo da URL dinâmica [courseId]
     const { courseId } = req.query;
 
     if (!courseId || typeof courseId !== 'string') {
@@ -40,18 +39,111 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const db = admin.firestore();
 
-    // 1. Buscar os enrollments (matrículas) baseadas no courseId
-    const snapshot = await db.collection('course_enrollments')
+    // 1. Busca Matrículas Diretas (Coleção course_enrollments)
+    const directEnrollmentsSnap = await db.collection('course_enrollments')
       .where('courseId', '==', courseId)
       .get();
-
-    const students = snapshot.docs.map(doc => ({
+    
+    const directEnrollments = directEnrollmentsSnap.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
 
-    // Retornar a lista (Array) formatada para o frontend
-    return res.status(200).json({ success: true, students });
+    // 2. Busca Alunos para verificar acesso via Combo (Coleção users -> array access)
+    // Buscamos alunos ativos para filtrar em memória os que possuem o curso no array 'access'
+    const studentsSnap = await db.collection('users')
+      .where('role', '==', 'student')
+      .get();
+
+    const studentMap = new Map<string, any>();
+
+    // Parte A: Processar alunos que ganharam acesso via Combo/Produto
+    studentsSnap.docs.forEach(doc => {
+      const userData = doc.data();
+      const accessArray = userData.access || [];
+      
+      // Verifica se existe um item de acesso do tipo 'course' para este courseId e que esteja ativo
+      const courseAccess = accessArray.find((acc: any) => 
+        acc.type === 'course' && 
+        acc.targetId === courseId && 
+        acc.isActive === true
+      );
+
+      if (courseAccess) {
+        studentMap.set(doc.id, {
+          id: doc.id,
+          userId: doc.id,
+          userName: userData.name || userData.displayName || 'Sem Nome',
+          userEmail: userData.email || '',
+          userPhone: userData.phone || userData.whatsapp || userData.contact || '',
+          userCpf: userData.cpf || '',
+          userAvatar: userData.photoURL || '',
+          enrollmentType: (courseAccess.id && String(courseAccess.id).startsWith('mig_')) ? 'MIGRACAO' : 'REGULAR',
+          accessOrigin: (courseAccess.id && String(courseAccess.id).startsWith('mig_')) ? 'MIGRATION' : 'COMBO',
+          expiresAt: courseAccess.endDate ? (courseAccess.endDate.toDate ? courseAccess.endDate.toDate().toISOString() : courseAccess.endDate) : null,
+          releasedAt: courseAccess.startDate ? (courseAccess.startDate.toDate ? courseAccess.startDate.toDate().toISOString() : courseAccess.startDate) : (userData.createdAt?.toDate ? userData.createdAt.toDate().toISOString() : userData.createdAt),
+          active: courseAccess.isActive !== false
+        });
+      }
+    });
+
+    // Parte B: Processar Matrículas Diretas (Sobrescrevendo ou complementando)
+    for (const enrollment of directEnrollments) {
+      const userId = (enrollment as any).userId;
+      if (!userId) continue;
+
+      let userProfile = studentMap.get(userId);
+      
+      if (!userProfile) {
+        // Busca no snap de usuários carregados
+        const userDoc = studentsSnap.docs.find(d => d.id === userId);
+        if (userDoc) {
+          const userData = userDoc.data();
+          userProfile = { 
+            id: userDoc.id,
+            userId: userDoc.id,
+            userName: userData.name || userData.displayName || 'Sem Nome',
+            userEmail: userData.email || '',
+            userPhone: userData.phone || userData.whatsapp || userData.contact || '',
+            userCpf: userData.cpf || '',
+            userAvatar: userData.photoURL || '',
+            createdAt: userData.createdAt
+          };
+        } else {
+          // Se não encontrou no snap (ex: role não é 'student'), busca no Firestore
+          const docRef = await db.collection('users').doc(userId).get();
+          if (docRef.exists) {
+            const userData = docRef.data() || {};
+            userProfile = { 
+              id: docRef.id,
+              userId: docRef.id,
+              userName: userData.name || userData.displayName || 'Sem Nome',
+              userEmail: userData.email || '',
+              userPhone: userData.phone || userData.whatsapp || userData.contact || '',
+              userCpf: userData.cpf || '',
+              userAvatar: userData.photoURL || '',
+              createdAt: userData.createdAt
+            };
+          }
+        }
+      }
+
+      if (userProfile) {
+        studentMap.set(userId, {
+          ...userProfile,
+          enrollmentType: (enrollment as any).enrollmentType || 'REGULAR',
+          accessOrigin: 'DIRECT',
+          expiresAt: (enrollment as any).expiresAt ? ((enrollment as any).expiresAt.toDate ? (enrollment as any).expiresAt.toDate().toISOString() : (enrollment as any).expiresAt) : null,
+          releasedAt: (enrollment as any).releasedAt ? ((enrollment as any).releasedAt.toDate ? (enrollment as any).releasedAt.toDate().toISOString() : (enrollment as any).releasedAt) : ((enrollment as any).createdAt ? ((enrollment as any).createdAt.toDate ? (enrollment as any).createdAt.toDate().toISOString() : (enrollment as any).createdAt) : (userProfile.createdAt?.toDate ? userProfile.createdAt.toDate().toISOString() : userProfile.createdAt)),
+          active: (enrollment as any).active !== false
+        });
+      }
+    }
+
+    const aggregatedStudents = Array.from(studentMap.values());
+
+    // 6. Retorno
+    return res.status(200).json({ success: true, students: aggregatedStudents });
 
   } catch (error) {
     console.error("Erro ao buscar alunos do curso:", error);

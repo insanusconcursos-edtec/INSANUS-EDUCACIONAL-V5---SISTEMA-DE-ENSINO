@@ -26,29 +26,49 @@ export const usePlanSync = (planId: string | undefined): UsePlanSyncReturn => {
     }
 
     // Listen to the Plan Document for timestamp changes
-    const unsub = onSnapshot(doc(db, 'plans', planId), (docSnap) => {
+    const unsub = onSnapshot(
+      doc(db, 'plans', planId), 
+      { serverTimestamps: 'estimate' }, // Garante que timestamps pendentes tenham uma estimativa
+      (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             
-            const modified = data.lastModifiedAt?.toDate ? data.lastModifiedAt.toDate() : null;
-            const synced = data.lastSyncedAt?.toDate ? data.lastSyncedAt.toDate() : null;
+            // Helper to get millis from Timestamp or Date
+            const getMillis = (val: any) => {
+              if (!val) return 0;
+              if (val.toMillis) return val.toMillis();
+              if (val.seconds) return val.seconds * 1000;
+              if (val instanceof Date) return val.getTime();
+              try {
+                return new Date(val).getTime() || 0;
+              } catch {
+                return 0;
+              }
+            };
 
-            setLastModified(modified);
-            setLastSynced(synced);
+            const modifiedMillis = getMillis(data.lastModifiedAt);
+            const syncedMillis = getMillis(data.lastSyncedAt);
+
+            setLastModified(data.lastModifiedAt?.toDate ? data.lastModifiedAt.toDate() : (data.lastModifiedAt ? new Date(modifiedMillis) : null));
+            setLastSynced(data.lastSyncedAt?.toDate ? data.lastSyncedAt.toDate() : (data.lastSyncedAt ? new Date(syncedMillis) : null));
 
             // Compare dates
-            if (!synced) {
-                // Never synced
-                setHasPendingChanges(true);
-            } else if (modified && modified > synced) {
-                // Modified after sync
-                setHasPendingChanges(true);
-            } else {
-                setHasPendingChanges(false);
-            }
+            // Se modificado é maior que sincronizado (com margem de 1s), ou se nunca sincronizou mas tem modificação
+            const hasPending = 
+              (modifiedMillis > syncedMillis + 10) || 
+              (modifiedMillis > 0 && syncedMillis === 0);
+
+            console.log(`[usePlanSync] Plan: ${planId} | Modified: ${modifiedMillis} | Synced: ${syncedMillis} | Pending: ${hasPending}`);
+            
+            setHasPendingChanges(hasPending);
         }
         setLoading(false);
-    });
+      },
+      (error) => {
+        console.error("[usePlanSync] Error listening to plan sync status:", error);
+        setLoading(false);
+      }
+    );
 
     return () => unsub();
   }, [planId]);

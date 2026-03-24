@@ -15,6 +15,9 @@ const PlanUpdateManager: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
+  const [masterSync, setMasterSync] = useState<any>(null);
+  const [userSync, setUserSync] = useState<any>(null);
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -29,36 +32,72 @@ const PlanUpdateManager: React.FC = () => {
           
           // Timestamp da última sync do USUÁRIO
           // @ts-expect-error - planStats might not be fully typed in userData
-          const userLastSync = userData.planStats?.[activePlanId]?.lastSyncedAt;
-
-          // 2. Monitorar o Plano Mestre para ver se há novas publicações
-          const planUnsub = onSnapshot(doc(db, 'plans', activePlanId), (planSnap) => {
-            if (planSnap.exists()) {
-              const planData = planSnap.data();
-              const masterLastSync = planData.lastSyncedAt;
-
-              if (masterLastSync) {
-                // Se o usuário nunca sincronizou, ou se o mestre é mais novo que o do usuário
-                const isOutdated = !userLastSync || (masterLastSync.toMillis() > userLastSync.toMillis());
-                
-                if (isOutdated) {
-                  setHasUpdate(true);
-                  setIsOpen(true);
-                } else {
-                  setHasUpdate(false);
-                  setIsOpen(false);
-                }
-              }
-            }
-          });
-
-          return () => planUnsub();
+          const lastSync = userData.planStats?.[activePlanId]?.lastSyncedAt;
+          setUserSync(lastSync);
         }
       }
     });
 
     return () => userUnsub();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentPlanId) return;
+
+    // 2. Monitorar o Plano Mestre para ver se há novas publicações
+    const planUnsub = onSnapshot(doc(db, 'plans', currentPlanId), (planSnap) => {
+      if (planSnap.exists()) {
+        const planData = planSnap.data();
+        setMasterSync(planData.lastSyncedAt);
+      }
+    });
+
+    return () => planUnsub();
+  }, [currentPlanId]);
+
+  useEffect(() => {
+    if (!masterSync) {
+      setHasUpdate(false);
+      setIsOpen(false);
+      return;
+    }
+
+    // Helper to get millis from Timestamp or Date
+    const getMillis = (val: any) => {
+      if (!val) return 0;
+      if (val.toMillis) return val.toMillis();
+      if (val.seconds) return val.seconds * 1000;
+      if (val instanceof Date) return val.getTime();
+      try {
+        return new Date(val).getTime() || 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    const masterMillis = getMillis(masterSync);
+    const userMillis = getMillis(userSync);
+
+    // Se o usuário nunca sincronizou, ou se o mestre é mais novo que o do usuário
+    // Adicionamos uma margem de 1000ms para evitar falsos positivos por micro-diferenças de precisão
+    const isOutdated = !userSync || (masterMillis > userMillis + 1000);
+    
+    console.log(`[PlanUpdateManager] Checking update for ${currentPlanId}:`, {
+      master: masterMillis,
+      user: userMillis,
+      isOutdated,
+      masterDate: new Date(masterMillis).toISOString(),
+      userDate: userMillis > 0 ? new Date(userMillis).toISOString() : 'NEVER'
+    });
+
+    if (isOutdated) {
+      setHasUpdate(true);
+      setIsOpen(true);
+    } else {
+      setHasUpdate(false);
+      setIsOpen(false);
+    }
+  }, [masterSync, userSync, currentPlanId]);
 
   const handleSync = async () => {
     if (!currentUser || !currentPlanId) return;

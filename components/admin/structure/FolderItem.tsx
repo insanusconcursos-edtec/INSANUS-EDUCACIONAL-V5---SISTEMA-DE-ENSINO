@@ -30,7 +30,7 @@ const FolderItem: React.FC<FolderItemProps> = ({
   };
 
   return (
-    <div className="mb-2 bg-zinc-950/50 border border-zinc-800 rounded-xl overflow-hidden transition-all hover:border-zinc-700">
+    <div className="group mb-2 bg-zinc-950/50 border border-zinc-800 rounded-xl overflow-hidden transition-all hover:border-zinc-700">
       {/* Folder Header */}
       <div 
         className={`
@@ -58,14 +58,14 @@ const FolderItem: React.FC<FolderItemProps> = ({
               <input 
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
-                className="w-full bg-black border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:border-brand-red outline-none uppercase font-bold"
+                className="w-full bg-black border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:border-brand-red outline-none font-bold"
                 autoFocus
               />
               <button type="submit" className="p-1 text-green-500 hover:bg-zinc-800 rounded"><Save size={12}/></button>
               <button type="button" onClick={() => setIsEditing(false)} className="p-1 text-zinc-500 hover:bg-zinc-800 rounded"><X size={12}/></button>
             </form>
           ) : (
-            <span className="text-xs font-bold text-zinc-300 uppercase truncate select-none tracking-wide">
+            <span className="text-xs font-bold text-zinc-300 truncate select-none tracking-wide">
               {folder.name}
             </span>
           )}
@@ -98,7 +98,7 @@ const FolderItem: React.FC<FolderItemProps> = ({
              {children}
              {(!children || React.Children.count(children) === 0) && (
                  <div className="p-3 text-center border-t border-dashed border-zinc-800/50">
-                    <span className="text-[9px] text-zinc-600 font-bold uppercase">Pasta Vazia</span>
+                    <span className="text-[9px] text-zinc-600 font-bold">Pasta vazia</span>
                  </div>
              )}
           </div>

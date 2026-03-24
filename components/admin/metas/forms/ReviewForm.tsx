@@ -124,7 +124,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ isOpen, onClose, onSave, initia
              >
                 <RefreshCw size={20} />
              </div>
-             <h2 className="text-xl font-black text-white uppercase tracking-tighter">
+             <h2 className="text-xl font-black text-white tracking-tighter">
                 {initialData ? 'Editar Revisão' : 'Nova Meta de Revisão'}
              </h2>
           </div>
@@ -140,20 +140,20 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ isOpen, onClose, onSave, initia
                  {/* Main Info */}
                  <div className="space-y-4">
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Título da Revisão</label>
+                        <label className="text-[10px] font-black text-zinc-500 tracking-widest">Título da Revisão</label>
                         <input 
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            placeholder="EX: REVISÃO DE DIREITO PENAL"
+                            placeholder="Ex: Revisão de Direito Penal"
                             required
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-white placeholder-zinc-700 focus:outline-none uppercase font-bold"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-white placeholder-zinc-700 focus:outline-none font-bold"
                             style={{ caretColor: color }}
                             onFocus={(e) => e.target.style.borderColor = color}
                             onBlur={(e) => e.target.style.borderColor = '#27272a'}
                         />
                     </div>
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                        <label className="text-[10px] font-black text-zinc-500 tracking-widest flex items-center gap-1">
                             <Clock size={12} /> Tempo Estimado (min)
                         </label>
                         <input 
@@ -208,7 +208,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ isOpen, onClose, onSave, initia
             <button 
                 onClick={handleSubmit}
                 disabled={isBusy}
-                className="w-full text-white font-black py-4 rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 hover:brightness-110 shadow-lg"
+                className="w-full text-white font-black py-4 rounded-xl transition-all tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 hover:brightness-110 shadow-lg"
                 style={{ backgroundColor: color, boxShadow: `0 0 20px ${color}40` }}
             >
                 {isBusy ? (

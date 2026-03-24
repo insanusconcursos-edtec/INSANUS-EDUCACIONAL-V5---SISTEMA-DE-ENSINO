@@ -103,7 +103,7 @@ const MaterialForm: React.FC<MaterialFormProps> = ({ isOpen, onClose, onSave, in
              >
                 <FileText size={20} />
              </div>
-             <h2 className="text-xl font-black text-white uppercase tracking-tighter">
+             <h2 className="text-xl font-black text-white tracking-tighter">
                 {initialData ? 'Editar Material' : 'Nova Meta de Leitura'}
              </h2>
           </div>
@@ -117,20 +117,20 @@ const MaterialForm: React.FC<MaterialFormProps> = ({ isOpen, onClose, onSave, in
           {/* Section 1: Basic Info */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2 space-y-2">
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Título da Meta</label>
+                <label className="text-[10px] font-black text-zinc-500 tracking-widest">Título da Meta</label>
                 <input 
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="EX: APOSTILA DE DIREITO PENAL"
+                    placeholder="Ex: Apostila de Direito Penal"
                     required
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-white placeholder-zinc-700 focus:outline-none uppercase font-bold"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-white placeholder-zinc-700 focus:outline-none font-bold"
                     style={{ caretColor: color }}
                     onFocus={(e) => e.target.style.borderColor = color}
                     onBlur={(e) => e.target.style.borderColor = '#27272a'}
                 />
             </div>
             <div className="space-y-2">
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Páginas Totais</label>
+                <label className="text-[10px] font-black text-zinc-500 tracking-widest">Páginas Totais</label>
                 <input 
                     type="number"
                     value={pageCount}
@@ -171,7 +171,7 @@ const MaterialForm: React.FC<MaterialFormProps> = ({ isOpen, onClose, onSave, in
             <button 
                 onClick={handleSubmit}
                 disabled={isBusy}
-                className="w-full text-white font-black py-4 rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 hover:brightness-110 shadow-lg"
+                className="w-full text-white font-black py-4 rounded-xl transition-all tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 hover:brightness-110 shadow-lg"
                 style={{ backgroundColor: color, boxShadow: `0 0 20px ${color}40` }}
             >
                 {isBusy ? (

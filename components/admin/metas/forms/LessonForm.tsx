@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, Trash2, Video, PlayCircle } from 'lucide-react';
+import { X, Save, Plus, Trash2, Video, PlayCircle, Search } from 'lucide-react';
 import { Meta, VideoLesson } from '../../../../services/metaService';
 import PandaVideoPlayer from '../../../../components/ui/video/PandaVideoPlayer';
 import { MetaColorSelector } from '../shared/MetaColorSelector';
+import { PandaVideoSelector } from '../../ui/PandaVideoSelector';
 
 interface LessonFormProps {
   isOpen: boolean;
@@ -18,6 +19,9 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
   const [videos, setVideos] = useState<VideoLesson[]>([]);
   const [color, setColor] = useState('#3b82f6'); // Default Blue
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+  const [isPandaSelectorOpen, setIsPandaSelectorOpen] = useState(false);
+  const [currentEditingLessonIndex, setCurrentEditingLessonIndex] = useState<number | null>(null);
+  const [lastPandaFolderId, setLastPandaFolderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -47,6 +51,40 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
     const updated = [...videos];
     updated[index] = { ...updated[index], [field]: value };
     setVideos(updated);
+  };
+
+  const handlePandaVideoSelect = (videoData: any) => {
+    if (currentEditingLessonIndex === null) return;
+
+    // 1. Diagnóstico e Fix de Duração (Panda API v2 geralmente usa 'length' para segundos)
+    // Forçamos a conversão para Número para evitar erros se vier como string.
+    // Se 'length' ou 'duration' não existirem, assumimos 0.
+    const rawSeconds = videoData.length ? Number(videoData.length) : 
+                      (videoData.duration ? Number(videoData.duration) : 0);
+
+    // 2. Cálculo Robusto de Minutos (Arredondamento para inteiro)
+    const durationInMinutes = rawSeconds > 0 ? Math.round(rawSeconds / 60) : 0;
+
+    // 3. Formatação da URL de Embed (Ticto/Iframe) - Mantendo a lógica correta
+    const embedUrl = `https://player-ticto.pandavideo.com.br/embed/?v=${videoData.id}`;
+
+    // 4. Atualização de Estado Imutável
+    const updated = [...videos];
+    updated[currentEditingLessonIndex] = {
+      ...updated[currentEditingLessonIndex],
+      title: videoData.title || updated[currentEditingLessonIndex].title,
+      link: embedUrl,
+      duration: durationInMinutes
+    };
+
+    // 5. Salva a memória da pasta de onde este vídeo saiu
+    if (videoData.folder_id) {
+      setLastPandaFolderId(videoData.folder_id);
+    }
+
+    setVideos(updated);
+    setIsPandaSelectorOpen(false);
+    setCurrentEditingLessonIndex(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,7 +118,7 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
               >
                   <Video size={20} />
               </div>
-              <h2 className="text-xl font-black text-white uppercase tracking-tighter">
+              <h2 className="text-xl font-black text-white tracking-tighter">
                   {initialData ? 'Editar Aulas' : 'Nova Meta de Aula'}
               </h2>
             </div>
@@ -91,13 +129,13 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
 
           <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Título da Meta</label>
+              <label className="text-[10px] font-black text-zinc-500 tracking-widest">Título da Meta</label>
               <input 
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="EX: INTRODUÇÃO AO DIREITO PENAL"
+                  placeholder="Ex: Introdução ao Direito Penal"
                   required
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-white placeholder-zinc-700 focus:outline-none uppercase font-bold"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-white placeholder-zinc-700 focus:outline-none font-bold"
                   style={{ caretColor: color }}
                   onFocus={(e) => e.target.style.borderColor = color}
                   onBlur={(e) => e.target.style.borderColor = '#27272a'}
@@ -111,7 +149,7 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Lista de Aulas</label>
+                  <label className="text-[10px] font-black text-zinc-500 tracking-widest">Lista de Aulas</label>
                   <span className="text-[10px] font-bold text-zinc-400">Tempo Total: <span className="text-white">{totalDuration} min</span></span>
               </div>
 
@@ -141,21 +179,34 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
                                               value={video.link}
                                               onChange={(e) => handleVideoChange(index, 'link', e.target.value)}
                                               placeholder="Link Embed ou URL do Panda Vídeo"
-                                              className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 pl-9 pr-8 text-xs text-white placeholder-zinc-700 focus:outline-none transition-colors"
+                                              className="w-full bg-zinc-950 border border-zinc-800 rounded px-3 py-2 pl-9 pr-20 text-xs text-white placeholder-zinc-700 focus:outline-none transition-colors"
                                               onFocus={(e) => e.target.style.borderColor = color}
                                               onBlur={(e) => e.target.style.borderColor = '#27272a'}
                                           />
-                                          {video.link && (
+                                          <div className="absolute inset-y-1 right-1 flex items-center gap-1">
                                               <button
                                                   type="button"
-                                                  onClick={() => setPreviewVideoUrl(video.link)}
-                                                  className="absolute inset-y-1 right-1 p-1.5 rounded transition-colors text-white"
-                                                  style={{ backgroundColor: color }}
-                                                  title="Preview Vídeo"
+                                                  onClick={() => {
+                                                      setCurrentEditingLessonIndex(index);
+                                                      setIsPandaSelectorOpen(true);
+                                                  }}
+                                                  className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors"
+                                                  title="Buscar no Panda"
                                               >
-                                                  <PlayCircle size={14} />
+                                                  <Search size={14} />
                                               </button>
-                                          )}
+                                              {video.link && (
+                                                  <button
+                                                      type="button"
+                                                      onClick={() => setPreviewVideoUrl(video.link)}
+                                                      className="p-1.5 rounded transition-colors text-white"
+                                                      style={{ backgroundColor: color }}
+                                                      title="Preview Vídeo"
+                                                  >
+                                                      <PlayCircle size={14} />
+                                                  </button>
+                                              )}
+                                          </div>
                                       </div>
                                       <p className="text-[9px] text-zinc-600 ml-1">
                                           Cole a URL do Player do Panda Vídeo ou Youtube.
@@ -194,7 +245,7 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
               <button 
                   type="button"
                   onClick={handleAddVideo}
-                  className="w-full py-3 border border-dashed border-zinc-700 rounded-lg text-zinc-500 hover:text-white hover:border-zinc-500 hover:bg-zinc-900 transition-all text-xs font-bold uppercase flex items-center justify-center gap-2"
+                  className="w-full py-3 border border-dashed border-zinc-700 rounded-lg text-zinc-500 hover:text-white hover:border-zinc-500 hover:bg-zinc-900 transition-all text-xs font-bold flex items-center justify-center gap-2"
               >
                   <Plus size={14} /> Adicionar Aula
               </button>
@@ -204,7 +255,7 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
               <button 
                   type="submit" 
                   disabled={loading}
-                  className="w-full text-white font-black py-3 rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 hover:brightness-110 shadow-lg"
+                  className="w-full text-white font-black py-3 rounded-xl transition-all tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 hover:brightness-110 shadow-lg"
                   style={{ backgroundColor: color, boxShadow: `0 0 20px ${color}40` }}
               >
                   {loading ? 'Salvando...' : <><Save size={16} /> Salvar Meta</>}
@@ -219,7 +270,7 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setPreviewVideoUrl(null)}>
           <div className="relative w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900">
-              <span className="text-sm font-bold text-white uppercase flex items-center gap-2">
+              <span className="text-sm font-bold text-white flex items-center gap-2">
                   <PlayCircle size={16} style={{ color }}/> Preview da Aula
               </span>
               <button onClick={() => setPreviewVideoUrl(null)} className="text-zinc-500 hover:text-white transition-colors">
@@ -231,6 +282,17 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
             </div>
           </div>
         </div>
+      )}
+
+      {isPandaSelectorOpen && (
+        <PandaVideoSelector 
+          initialFolderId={lastPandaFolderId}
+          onSelect={handlePandaVideoSelect}
+          onClose={() => {
+            setIsPandaSelectorOpen(false);
+            setCurrentEditingLessonIndex(null);
+          }}
+        />
       )}
     </>
   );

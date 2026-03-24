@@ -16,6 +16,7 @@ import {
   addFolder,
   renameFolder,
   deleteFolder,
+  renameDiscipline,
   Discipline,
   Topic 
 } from '../../services/structureService';
@@ -27,6 +28,8 @@ import VerticalEdictManager from '../../components/admin/edict/VerticalEdictMana
 import { PlanMentorshipTab } from '../../components/admin/plan/mentorship/PlanMentorshipTab';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import Loading from '../../components/ui/Loading';
+import SyncControlPanel from '../../components/admin/sync/SyncControlPanel';
+import { usePlanSync } from '../../hooks/usePlanSync';
 
 type TabView = 'STRUCTURE' | 'CYCLES' | 'EDICT' | 'MENTORSHIP';
 
@@ -47,6 +50,9 @@ const PlanEditor: React.FC = () => {
   // Selection State
   const [selectedDiscipline, setSelectedDiscipline] = useState<Discipline | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  
+  // Sync State
+  const { hasPendingChanges } = usePlanSync(planId);
   
   // Modal State
   const [modalConfig, setModalConfig] = useState<{
@@ -83,6 +89,18 @@ const PlanEditor: React.FC = () => {
   useEffect(() => {
     fetchPlanAndStructure();
   }, [fetchPlanAndStructure]);
+
+  // 2. Browser Exit Protection
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasPendingChanges) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasPendingChanges]);
 
   // 2. Load Topics
   useEffect(() => {
@@ -126,6 +144,19 @@ const PlanEditor: React.FC = () => {
     try {
         await renameFolder(planId, id, newName);
         fetchPlanAndStructure();
+    } catch (e) {
+        console.error(e);
+    }
+  };
+
+  const handleRenameDiscipline = async (id: string, newName: string) => {
+    if (!planId) return;
+    try {
+        await renameDiscipline(planId, id, newName);
+        setDisciplines(prev => prev.map(d => d.id === id ? { ...d, name: newName } : d));
+        if (selectedDiscipline?.id === id) {
+            setSelectedDiscipline(prev => prev ? { ...prev, name: newName } : null);
+        }
     } catch (e) {
         console.error(e);
     }
@@ -243,6 +274,10 @@ const PlanEditor: React.FC = () => {
     }
   };
 
+  const handleUpdateTopicLocal = (id: string, name: string) => {
+    setTopics(prev => prev.map(t => t.id === id ? { ...t, name } : t));
+  };
+
   const handleConfirmDelete = async () => {
     if (!planId || !modalConfig.item) return;
 
@@ -288,7 +323,7 @@ const PlanEditor: React.FC = () => {
                     <Layout size={12} />
                     <span>Editor de Plano</span>
                 </div>
-                <h1 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">
+                <h1 className="text-2xl font-black text-white tracking-tighter leading-none">
                     {plan?.title}
                 </h1>
             </div>
@@ -325,10 +360,19 @@ const PlanEditor: React.FC = () => {
 
       {/* Main Content Area */}
       {activeTab === 'STRUCTURE' && (
-          <div className="flex-1 grid grid-cols-12 gap-6 overflow-hidden">
-            
-            {/* Left Column - Disciplines (30%) */}
-            <div className="col-span-4 lg:col-span-3">
+          <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+            {/* Sync Bar for Structure */}
+            <div className="flex items-center justify-between bg-zinc-900/30 p-3 rounded-xl border border-zinc-800/50">
+                <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-black uppercase tracking-widest">
+                    <RefreshCw size={12} />
+                    <span>Status de Publicação</span>
+                </div>
+                {planId && <SyncControlPanel planId={planId} variant="minimal" />}
+            </div>
+
+            <div className="flex-1 grid grid-cols-12 gap-6 overflow-hidden">
+              {/* Left Column - Disciplines (30%) */}
+              <div className="col-span-4 lg:col-span-3">
                 <DisciplineList 
                     disciplines={disciplines}
                     folders={plan?.folders || []}
@@ -339,6 +383,7 @@ const PlanEditor: React.FC = () => {
                     }}
                     onAddDiscipline={handleAddDiscipline}
                     onDeleteRequest={requestDeleteDiscipline}
+                    onRenameDiscipline={handleRenameDiscipline}
                     onMoveDisciplineFolder={handleChangeDisciplineFolder}
                     onReorderDiscipline={handleMoveDiscipline}
                     
@@ -367,10 +412,12 @@ const PlanEditor: React.FC = () => {
                         onDeleteRequest={requestDeleteTopic}
                         onMove={handleMoveTopic}
                         onSelectTopic={setSelectedTopic}
+                        onUpdateTopic={handleUpdateTopicLocal}
                     />
                 )}
             </div>
           </div>
+        </div>
       )}
 
       {activeTab === 'CYCLES' && (

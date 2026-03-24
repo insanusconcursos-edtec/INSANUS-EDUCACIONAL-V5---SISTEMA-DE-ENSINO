@@ -42,8 +42,8 @@ export function AdminCourseStudentsTab({ courseId }: AdminCourseStudentsTabProps
       if (data.success) {
         const realStudents = data.students as CourseEnrollment[];
         
-        // Ordenação Alfabética Real
-        realStudents.sort((a, b) => a.userName.localeCompare(b.userName));
+        // Ordenação Alfabética Real (Defensiva)
+        realStudents.sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
         
         setEnrollments(realStudents);
         

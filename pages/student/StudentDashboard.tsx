@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { StudentGoalCard, StudentGoal } from '../../components/student/StudentGoalCard';
-import { getDashboardData, toggleGoalStatus, getStudentConfig, getStudentCompletedMetas, getLocalISODate, checkAndUnlockSimulados } from '../../services/studentService';
+import { getDashboardData, toggleGoalStatus, getStudentConfig, getStudentCompletedMetas, getLocalISODate, checkAndUnlockSimulados, getStudentPlans } from '../../services/studentService';
 import { rescheduleOverdueTasks, fetchFullPlanData, scheduleUserSimulado, anticipateAndShiftGoals } from '../../services/scheduleService';
 import { useAuth } from '../../contexts/AuthContext';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';

@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Folder, Cycle, CycleSystem, touchPlan } from './planService';
+export { touchPlan };
 
 export interface Discipline {
   id?: string;
@@ -193,6 +194,12 @@ export const addDiscipline = async (planId: string, name: string, folderId: stri
 
 export const deleteDiscipline = async (planId: string, disciplineId: string) => {
   await deleteDoc(doc(db, 'plans', planId, 'disciplines', disciplineId));
+  await touchPlan(planId);
+};
+
+export const renameDiscipline = async (planId: string, disciplineId: string, newName: string) => {
+  const discRef = doc(db, 'plans', planId, 'disciplines', disciplineId);
+  await updateDoc(discRef, { name: newName });
   await touchPlan(planId);
 };
 

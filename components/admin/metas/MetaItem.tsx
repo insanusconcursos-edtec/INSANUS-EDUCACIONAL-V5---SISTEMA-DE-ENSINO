@@ -161,7 +161,7 @@ const MetaItem: React.FC<MetaItemProps> = ({ meta, onEdit, onDelete, onMove, isF
         </div>
         
         <div className="flex flex-col gap-1 overflow-hidden">
-          <span className="text-xs font-bold text-zinc-200 uppercase truncate">{meta.title}</span>
+          <span className="text-xs font-bold text-zinc-200 truncate">{meta.title}</span>
           {getDetails()}
         </div>
       </div>

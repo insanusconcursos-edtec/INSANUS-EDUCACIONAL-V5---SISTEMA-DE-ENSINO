@@ -141,9 +141,10 @@ class BatchHandler {
  */
 export const touchPlan = async (planId: string) => {
   const docRef = doc(db, 'plans', planId);
-  await updateDoc(docRef, cleanObject({
+  // Injeta o serverTimestamp diretamente, sem passar por utilitários de limpeza
+  await updateDoc(docRef, {
     lastModifiedAt: serverTimestamp()
-  }));
+  });
 };
 
 // Storage Functions
@@ -177,24 +178,30 @@ export const getPlanById = async (id: string): Promise<Plan | null> => {
 };
 
 export const createPlan = async (data: Omit<Plan, 'id'>) => {
-  await addDoc(collection(db, 'plans'), cleanObject({
+  const cleaned = cleanObject({
     ...data,
     folders: [], 
     cycles: [], // Inicializa ciclos vazios
     cycleSystem: 'continuous', // Default
     isActiveUserMode: false, // Default off
-    createdAt: serverTimestamp(),
-    lastModifiedAt: serverTimestamp(),
     lastSyncedAt: null
-  }));
+  });
+
+  await addDoc(collection(db, 'plans'), {
+    ...cleaned,
+    createdAt: serverTimestamp(),
+    lastModifiedAt: serverTimestamp()
+  });
 };
 
 export const updatePlan = async (id: string, data: Partial<Plan>) => {
   const docRef = doc(db, 'plans', id);
-  await updateDoc(docRef, cleanObject({
-    ...data,
+  const cleaned = cleanObject(data);
+  
+  await updateDoc(docRef, {
+    ...cleaned,
     lastModifiedAt: serverTimestamp()
-  }));
+  });
 };
 
 export const deletePlan = async (id: string) => {

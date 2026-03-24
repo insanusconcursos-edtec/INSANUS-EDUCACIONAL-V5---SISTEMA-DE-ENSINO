@@ -90,7 +90,7 @@ const DisciplineActionMenu: React.FC<DisciplineActionMenuProps> = ({
             onClick={(e) => e.stopPropagation()} // Prevent click inside menu from closing it
           >
             <div className="px-3 py-2 bg-zinc-900/50 border-b border-zinc-800">
-              <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Mover Para...</span>
+              <span className="text-[9px] font-black text-zinc-500 tracking-widest">Mover para...</span>
             </div>
             
             <div className="p-1 max-h-64 overflow-y-auto custom-scrollbar">
