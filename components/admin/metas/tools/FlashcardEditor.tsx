@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { 
-  Plus, Wand2, Trash2, Loader2, Sparkles, AlertTriangle, 
+  Plus, Trash2, Loader2, Sparkles, AlertTriangle, 
   CheckCircle2, Maximize2, FileText, X, UploadCloud, BrainCircuit
 } from 'lucide-react';
 
@@ -90,8 +90,9 @@ const FlashcardEditor: React.FC<FlashcardEditorProps> = ({ cards, onChange }) =>
       // Limpa staging após sucesso
       setSelectedFiles([]);
 
-    } catch (error: any) {
-      console.error("Erro na geração de flashcards:", error);
+    } catch (err: unknown) {
+      console.error("Erro na geração de flashcards:", err);
+      const error = err as { message?: string };
       setErrorMsg(error.message || "Erro desconhecido ao processar documentos.");
     } finally {
       setIsGenerating(false);

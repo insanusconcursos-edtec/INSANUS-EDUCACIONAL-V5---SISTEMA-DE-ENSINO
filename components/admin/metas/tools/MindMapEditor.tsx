@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MindMapNode } from '../../../../services/metaService';
-import { Plus, Wand2, X, Move, Trash2 } from 'lucide-react';
+import { Plus, Wand2, Trash2 } from 'lucide-react';
 
 interface MindMapEditorProps {
   nodes: MindMapNode[];

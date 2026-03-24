@@ -7,7 +7,7 @@ import { generateStudyMaterial } from './src/backend/services/geminiService.js';
 import { getAdminConfig } from './src/backend/services/firebaseAdmin.js';
 import { provisionTictoPurchase, revokeTictoPurchase } from './src/backend/services/provisioningService.js';
 
-const __filename = fileURLToPath(import.meta.url);
+// const __filename = fileURLToPath(import.meta.url);
 // __dirname is not used in this file, but kept for reference if needed
 // const __dirname = path.dirname(__filename);
 
@@ -30,6 +30,31 @@ interface PandaVideo {
   video_player_url?: string;
   embed_url?: string;
   length?: number;
+}
+
+interface UserAccess {
+  type: string;
+  targetId: string;
+  isActive: boolean;
+  id?: string | number;
+  endDate?: any;
+  startDate?: any;
+}
+
+interface StudentProfile {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userPhone: string;
+  userCpf: string;
+  userAvatar: string;
+  enrollmentType?: string;
+  accessOrigin?: string;
+  expiresAt?: string | null;
+  releasedAt?: string | null;
+  active?: boolean;
+  createdAt?: any;
 }
 
 async function startServer() {
@@ -182,14 +207,14 @@ async function startServer() {
         .where('role', '==', 'student')
         .get();
 
-      const studentMap = new Map<string, any>();
+      const studentMap = new Map<string, StudentProfile>();
 
       // Parte A: Processar alunos que ganharam acesso via Combo/Produto
       studentsSnap.docs.forEach(doc => {
         const userData = doc.data();
-        const accessArray = userData.access || [];
+        const accessArray: UserAccess[] = userData.access || [];
         
-        const courseAccess = accessArray.find((acc: any) => 
+        const courseAccess = accessArray.find((acc: UserAccess) => 
           acc.type === 'course' && 
           acc.targetId === courseId && 
           acc.isActive === true
@@ -215,7 +240,7 @@ async function startServer() {
 
       // Parte B: Processar Matrículas Diretas
       for (const enrollment of directEnrollments) {
-        const userId = (enrollment as any).userId;
+        const userId = (enrollment as { userId?: string }).userId;
         if (!userId) continue;
 
         let userProfile = studentMap.get(userId);
@@ -253,13 +278,20 @@ async function startServer() {
         }
 
         if (userProfile) {
+          const enrollmentData = enrollment as { 
+            enrollmentType?: string; 
+            expiresAt?: any; 
+            releasedAt?: any; 
+            createdAt?: any; 
+            active?: boolean; 
+          };
           studentMap.set(userId, {
             ...userProfile,
-            enrollmentType: (enrollment as any).enrollmentType || 'REGULAR',
+            enrollmentType: enrollmentData.enrollmentType || 'REGULAR',
             accessOrigin: 'DIRECT',
-            expiresAt: (enrollment as any).expiresAt ? ((enrollment as any).expiresAt.toDate ? (enrollment as any).expiresAt.toDate().toISOString() : (enrollment as any).expiresAt) : null,
-            releasedAt: (enrollment as any).releasedAt ? ((enrollment as any).releasedAt.toDate ? (enrollment as any).releasedAt.toDate().toISOString() : (enrollment as any).releasedAt) : ((enrollment as any).createdAt ? ((enrollment as any).createdAt.toDate ? (enrollment as any).createdAt.toDate().toISOString() : (enrollment as any).createdAt) : (userProfile.createdAt?.toDate ? userProfile.createdAt.toDate().toISOString() : userProfile.createdAt)),
-            active: (enrollment as any).active !== false
+            expiresAt: enrollmentData.expiresAt ? (enrollmentData.expiresAt.toDate ? enrollmentData.expiresAt.toDate().toISOString() : enrollmentData.expiresAt) : null,
+            releasedAt: enrollmentData.releasedAt ? (enrollmentData.releasedAt.toDate ? enrollmentData.releasedAt.toDate().toISOString() : enrollmentData.releasedAt) : (enrollmentData.createdAt ? (enrollmentData.createdAt.toDate ? enrollmentData.createdAt.toDate().toISOString() : enrollmentData.createdAt) : (userProfile.createdAt?.toDate ? userProfile.createdAt.toDate().toISOString() : userProfile.createdAt)),
+            active: enrollmentData.active !== false
           });
         }
       }
@@ -414,7 +446,7 @@ async function startServer() {
 
       const pathParts = urlObj.pathname.split('/').filter(Boolean);
       return pathParts[pathParts.length - 1] || url;
-    } catch (_e) {
+    } catch (_) {
       // Error ignored intentionally
       return url;
     }

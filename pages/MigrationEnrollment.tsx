@@ -195,12 +195,6 @@ export default function MigrationEnrollment() {
             <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Link Inválido</h2>
             <p className="text-zinc-500 text-sm">{error}</p>
           </div>
-          <button 
-            onClick={() => navigate('/login')}
-            className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-white font-bold uppercase tracking-widest rounded-xl transition-all"
-          >
-            Voltar para Login
-          </button>
         </div>
       </div>
     );

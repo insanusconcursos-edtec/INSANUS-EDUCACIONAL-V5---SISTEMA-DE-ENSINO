@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Save, FileText, Loader2 } from 'lucide-react';
 import { Meta, uploadBatchMetaFiles, MaterialLink, MaterialFile } from '../../../../services/metaService';
 import { MetaColorSelector } from '../shared/MetaColorSelector';

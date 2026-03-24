@@ -53,8 +53,8 @@ const App: React.FC = () => {
     <AuthProvider>
       <Toaster position="top-right" />
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
         <Route path="/migracao/:token" element={<MigrationEnrollment />} />
+        <Route path="/login" element={<LoginPage />} />
         
         {/* Admin Routes */}
         <Route path="/admin/eventos-ao-vivo/sala/:id" element={

@@ -11,10 +11,21 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 
+interface UserData {
+  role?: string;
+  name?: string;
+  email?: string;
+  cpf?: string;
+  phone?: string;
+  photoURL?: string;
+  access?: any[];
+  [key: string]: any;
+}
+
 interface AuthContextType {
   currentUser: User | null;
   userRole: 'ADMIN' | 'STUDENT' | 'COLLABORATOR' | null;
-  userData: any | null; // Stores full firestore document data (permissions, etc)
+  userData: UserData | null; // Stores full firestore document data (permissions, etc)
   loading: boolean;
   login: (email: string, password: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
@@ -34,7 +45,7 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<'ADMIN' | 'STUDENT' | 'COLLABORATOR' | null>(null);
-  const [userData, setUserData] = useState<any | null>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Hardcoded admin email for this phase
@@ -112,7 +123,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await createUserWithEmailAndPassword(auth, u.email, u.pass);
         console.log(`User created: ${u.email}`);
         await signOut(auth); 
-      } catch (error: any) {
+      } catch (err: unknown) {
+        const error = err as { code?: string };
         if (error.code === 'auth/email-already-in-use') {
           console.log(`User already exists: ${u.email}`);
         } else {

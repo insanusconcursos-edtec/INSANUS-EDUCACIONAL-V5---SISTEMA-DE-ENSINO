@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  X, ChevronLeft, ChevronRight, RotateCw, 
+  X, ChevronLeft, ChevronRight, 
   BrainCircuit, Layers, ArrowRight, ArrowLeft
 } from 'lucide-react';
 import { Flashcard } from '../../../../services/metaService';
