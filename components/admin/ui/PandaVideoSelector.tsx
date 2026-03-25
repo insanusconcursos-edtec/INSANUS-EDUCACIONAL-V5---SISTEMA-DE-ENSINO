@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, Folder, ChevronLeft, PlayCircle, Loader2 } from 'lucide-react';
 import { pandaService } from '../../../services/pandaService';
+import { extractPandaVideoId } from '../../../utils/pandaUtils';
 
 interface PandaVideoSelectorProps {
   onSelect: (video: any) => void;
@@ -132,24 +133,27 @@ export const PandaVideoSelector: React.FC<PandaVideoSelectorProps> = ({ onSelect
                 </button>
               ))}
 
-              {pandaVideos.length > 0 ? (
-                pandaVideos.map((video) => (
-                  <button
-                    key={video.id}
-                    type="button"
-                    onClick={() => onSelect(video)}
-                    className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-all group"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:bg-red-600/10 group-hover:text-red-500 transition-colors">
-                      <PlayCircle size={20} />
-                    </div>
-                    <div className="flex-1 text-left">
-                      <div className="font-bold text-white group-hover:text-red-500 transition-colors">{video.title}</div>
-                      <div className="text-[10px] text-zinc-500 font-mono mt-1 uppercase tracking-tighter">{video.id}</div>
-                    </div>
-                  </button>
-                ))
-              ) : !pandaFolders.length && (
+                  {pandaVideos.length > 0 ? (
+                    pandaVideos.map((video) => {
+                      const displayId = extractPandaVideoId(video) || "ID indisponível";
+                      return (
+                        <button
+                          key={video.id}
+                          type="button"
+                          onClick={() => onSelect(video)}
+                          className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-all group"
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:bg-red-600/10 group-hover:text-red-500 transition-colors">
+                            <PlayCircle size={20} />
+                          </div>
+                          <div className="flex-1 text-left">
+                            <div className="font-bold text-white group-hover:text-red-500 transition-colors">{video.title}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono mt-1 uppercase tracking-tighter">{displayId}</div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  ) : !pandaFolders.length && (
                 <div className="text-center py-12">
                   <p className="text-gray-500 text-sm">Nenhum item encontrado.</p>
                 </div>

@@ -31,6 +31,13 @@ const LESSONS_COLLECTION = 'course_lessons';
 const CONTENTS_COLLECTION = 'course_contents';
 const EDITAL_COLLECTION = 'course_edital'; 
 
+// Helper para remover campos undefined antes de salvar no Firestore (recursivo)
+const sanitizeData = (data: any) => {
+  return JSON.parse(JSON.stringify(data, (key, value) => {
+    return value === undefined ? null : value;
+  }));
+};
+
 export const courseService = {
   // Helper para upload de Banner
   uploadBanner: async (file: File): Promise<string> => {
@@ -56,21 +63,12 @@ export const courseService = {
         finalData.bannerUrlMobile = await courseService.uploadBanner(bannerMobileFile);
       }
 
-      // =======================================================================
-      // LIMPEZA CIRÚRGICA: Remove qualquer campo 'undefined' antes de salvar
-      // =======================================================================
-      (Object.keys(finalData) as (keyof typeof finalData)[]).forEach(key => {
-        if (finalData[key] === undefined) {
-          delete finalData[key];
-        }
-      });
-
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+      const docRef = await addDoc(collection(db, COLLECTION_NAME), sanitizeData({
         ...finalData,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         active: true
-      });
+      }));
       return docRef.id;
     } catch (error) {
       console.error("Erro ao criar curso:", error);
@@ -105,20 +103,11 @@ export const courseService = {
         finalData.bannerUrlMobile = await courseService.uploadBanner(bannerMobileFile);
       }
 
-      // =======================================================================
-      // LIMPEZA CIRÚRGICA: Remove qualquer campo 'undefined' antes de salvar
-      // =======================================================================
-      (Object.keys(finalData) as (keyof typeof finalData)[]).forEach(key => {
-        if (finalData[key] === undefined) {
-          delete finalData[key];
-        }
-      });
-
       const docRef = doc(db, COLLECTION_NAME, id);
-      await updateDoc(docRef, {
+      await updateDoc(docRef, sanitizeData({
         ...finalData,
         updatedAt: new Date().toISOString()
-      });
+      }));
     } catch (error) {
       console.error("Erro ao atualizar curso:", error);
       throw error;
@@ -135,31 +124,161 @@ export const courseService = {
     }
   },
 
-  // Duplicar curso
+  // Duplicar curso (Deep Copy)
   duplicateCourse: async (originalCourse: OnlineCourse) => {
     try {
-      // Garantir que não passamos undefined na duplicação também
-      const newCourseData: Partial<OnlineCourse> = {
-        title: `${originalCourse.title} (Cópia)`,
-        coverUrl: originalCourse.coverUrl,
-        bannerUrlDesktop: originalCourse.bannerUrlDesktop || null,
-        bannerUrlMobile: originalCourse.bannerUrlMobile || null,
-        categoryId: originalCourse.categoryId,
-        subcategoryId: originalCourse.subcategoryId || '',
-        organization: originalCourse.organization || '',
-        type: originalCourse.type || 'REGULAR',
+      console.log(`[DUPLICATE] Iniciando duplicação do curso: ${originalCourse.title}`);
+      const operations: { ref: any, data: any }[] = [];
+
+      // 1. Criar novo curso (Metadata)
+      const newCourseRef = doc(collection(db, COLLECTION_NAME));
+      const newCourseData = {
+        ...originalCourse,
+        title: `${originalCourse.title} - Cópia`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        active: true
+        active: true,
+        // Sanitização de acessos (Zerar base de alunos)
+        allowedUsers: [],
+        enrolledStudents: [],
+        studentsCount: 0
+      };
+      delete (newCourseData as any).id;
+      operations.push({ ref: newCourseRef, data: newCourseData });
+
+      // Mapeamentos para manter integridade referencial
+      const moduleMapping: Record<string, string> = {};
+      const subModuleMapping: Record<string, string> = {};
+      const lessonMapping: Record<string, string> = {};
+
+      // 2. Módulos
+      const modules = await courseService.getModules(originalCourse.id);
+      console.log(`[DUPLICATE] ${modules.length} módulos encontrados.`);
+
+      // Processamento em paralelo de módulos
+      await Promise.all(modules.map(async (mod) => {
+        const newModRef = doc(collection(db, MODULES_COLLECTION));
+        moduleMapping[mod.id] = newModRef.id;
+        
+        const newModData = {
+          ...mod,
+          courseId: newCourseRef.id
+        };
+        delete (newModData as any).id;
+        operations.push({ ref: newModRef, data: newModData });
+
+        // 3. Submódulos (Pastas) e Aulas em paralelo
+        const [subModules, lessons] = await Promise.all([
+          courseService.getSubModules(mod.id),
+          courseService.getLessons(mod.id)
+        ]);
+
+        // Processar Submódulos
+        subModules.forEach(sub => {
+          const newSubRef = doc(collection(db, SUBMODULES_COLLECTION));
+          subModuleMapping[sub.id] = newSubRef.id;
+          
+          const newSubData = {
+            ...sub,
+            moduleId: newModRef.id
+          };
+          delete (newSubData as any).id;
+          operations.push({ ref: newSubRef, data: newSubData });
+        });
+
+        // Processar Aulas e seus conteúdos
+        await Promise.all(lessons.map(async (lesson) => {
+          const newLessonRef = doc(collection(db, LESSONS_COLLECTION));
+          lessonMapping[lesson.id] = newLessonRef.id;
+          
+          const newLessonData = {
+            ...lesson,
+            moduleId: newModRef.id,
+            // O subModuleId será atualizado depois se necessário, ou aqui se já tivermos o mapeamento
+            // Como estamos processando subModules de forma síncrona acima, o mapeamento já existe
+            subModuleId: lesson.subModuleId ? subModuleMapping[lesson.subModuleId] : null
+          };
+          delete (newLessonData as any).id;
+          operations.push({ ref: newLessonRef, data: newLessonData });
+
+          // 5. Conteúdos da Aula
+          const contents = await courseService.getContents(lesson.id);
+          contents.forEach(content => {
+            const newContentRef = doc(collection(db, CONTENTS_COLLECTION));
+            const newContentData = {
+              ...content,
+              lessonId: newLessonRef.id
+            };
+            delete (newContentData as any).id;
+            operations.push({ ref: newContentRef, data: newContentData });
+          });
+        }));
+      }));
+
+      // 6. Edital Verticalizado
+      const edital = await courseService.getCourseEdital(originalCourse.id);
+      if (edital) {
+        console.log(`[DUPLICATE] Edital encontrado, processando...`);
+        const newEditalRef = doc(db, EDITAL_COLLECTION, newCourseRef.id);
+        
+        // Clonagem profunda do edital para manipular referências
+        const newEditalData: CourseEditalStructure = JSON.parse(JSON.stringify(edital));
+        newEditalData.courseId = newCourseRef.id;
+        newEditalData.updatedAt = serverTimestamp();
+
+        // Função recursiva para atualizar IDs de aulas e módulos vinculados no edital
+        const updateTopics = (topics: any[]) => {
+          topics.forEach(topic => {
+            if (topic.linkedLessons) {
+              topic.linkedLessons = topic.linkedLessons.map((ll: any) => ({
+                ...ll,
+                id: lessonMapping[ll.id] || ll.id,
+                moduleId: moduleMapping[ll.moduleId] || ll.moduleId
+              }));
+            }
+            if (topic.subtopics && topic.subtopics.length > 0) {
+              updateTopics(topic.subtopics);
+            }
+          });
+        };
+
+        newEditalData.disciplines.forEach(discipline => {
+          updateTopics(discipline.topics);
+        });
+
+        operations.push({ ref: newEditalRef, data: newEditalData });
+      }
+
+      console.log(`[DUPLICATE] Total de operações preparadas: ${operations.length}. Iniciando gravação em lotes.`);
+
+      // 7. Execução em Lotes (Chunked Batches)
+      const MAX_BATCH_SIZE = 400;
+      let batch = writeBatch(db);
+      let operationCounter = 0;
+      const commitPromises: Promise<void>[] = [];
+
+      const addOperationToBatch = () => {
+        operationCounter++;
+        if (operationCounter === MAX_BATCH_SIZE) {
+          commitPromises.push(batch.commit());
+          batch = writeBatch(db);
+          operationCounter = 0;
+        }
       };
 
-      // Limpeza de segurança
-      Object.keys(newCourseData).forEach(key => {
-        if (newCourseData[key] === undefined) delete newCourseData[key];
-      });
+      for (const op of operations) {
+        batch.set(op.ref, sanitizeData(op.data));
+        addOperationToBatch();
+      }
 
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), newCourseData);
-      return docRef.id;
+      if (operationCounter > 0) {
+        commitPromises.push(batch.commit());
+      }
+
+      await Promise.all(commitPromises);
+      console.log(`[DUPLICATE] Duplicação concluída com sucesso! Novo ID: ${newCourseRef.id}`);
+
+      return newCourseRef.id;
     } catch (error) {
       console.error("Erro ao duplicar curso:", error);
       throw error;

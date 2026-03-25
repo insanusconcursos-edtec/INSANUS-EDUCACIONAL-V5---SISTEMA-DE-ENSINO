@@ -42,8 +42,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await response.json();
     const videos = data.videos || data || [];
     
-    const cleanVideos = Array.isArray(videos) ? videos.map((v: PandaVideo) => ({
-      id: v.id || v.video_id,
+    const cleanVideos = Array.isArray(videos) ? videos.map((v: any) => ({
+      id: v.id,
+      video_id: v.video_id || v.id,
+      panda_id: v.video_id || v.id,
+      external_id: v.external_id || null,
+      playback_id: v.playback_id || null,
       title: v.title || v.name || 'Sem título',
       video_player_url: v.video_player_url || v.embed_url || null
     })) : [];

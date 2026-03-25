@@ -1,10 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import { X, Save, Plus, Trash2, Video, PlayCircle, Search } from 'lucide-react';
 import { Meta, VideoLesson } from '../../../../services/metaService';
 import PandaVideoPlayer from '../../../../components/ui/video/PandaVideoPlayer';
 import { MetaColorSelector } from '../shared/MetaColorSelector';
 import { PandaVideoSelector } from '../../ui/PandaVideoSelector';
+import { extractPandaVideoId, getPandaEmbedUrl, PandaVideo } from '../../../../utils/pandaUtils';
+import { pandaService } from '../../../../services/pandaService';
 
 interface LessonFormProps {
   isOpen: boolean;
@@ -22,6 +25,7 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
   const [isPandaSelectorOpen, setIsPandaSelectorOpen] = useState(false);
   const [currentEditingLessonIndex, setCurrentEditingLessonIndex] = useState<number | null>(null);
   const [lastPandaFolderId, setLastPandaFolderId] = useState<string | null>(null);
+  const [isSelectingVideo, setIsSelectingVideo] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -53,38 +57,63 @@ const LessonForm: React.FC<LessonFormProps> = ({ isOpen, onClose, onSave, initia
     setVideos(updated);
   };
 
-  const handlePandaVideoSelect = (videoData: any) => {
-    if (currentEditingLessonIndex === null) return;
+  const handlePandaVideoSelect = async (videoData: PandaVideo) => {
+    if (currentEditingLessonIndex === null || isSelectingVideo) return;
 
-    // 1. Diagnóstico e Fix de Duração (Panda API v2 geralmente usa 'length' para segundos)
-    // Forçamos a conversão para Número para evitar erros se vier como string.
-    // Se 'length' ou 'duration' não existirem, assumimos 0.
-    const rawSeconds = videoData.length ? Number(videoData.length) : 
-                      (videoData.duration ? Number(videoData.duration) : 0);
+    const toastId = toast.loading("Buscando link do vídeo...");
+    try {
+      setIsSelectingVideo(true);
+      
+      // 1. Busca os detalhes completos do vídeo para garantir o Playback ID
+      const videoDetails = await pandaService.getVideoDetails(videoData.id);
+      
+      if (!videoDetails) {
+        throw new Error("Não foi possível carregar os detalhes do vídeo.");
+      }
 
-    // 2. Cálculo Robusto de Minutos (Arredondamento para inteiro)
-    const durationInMinutes = rawSeconds > 0 ? Math.round(rawSeconds / 60) : 0;
+      // 2. Extração rigorosa (Parser de URL via utilitário)
+      const playbackId = extractPandaVideoId(videoDetails);
+      
+      // 3. Trava de Segurança Definitiva (Fail-Fast)
+      if (!playbackId) {
+        toast.error("Falha Crítica: Playback ID não encontrado.", { id: toastId });
+        console.error("Falha Crítica: Playback ID não encontrado nas URLs. Objeto:", videoDetails);
+        alert("Erro: Este vídeo não possui uma URL de embed pública válida no Panda. O vídeo pode estar processando ou com o embed desativado no painel do Panda Vídeo.");
+        return; // Impede a montagem de um player quebrado
+      }
 
-    // 3. Formatação da URL de Embed (Ticto/Iframe) - Mantendo a lógica correta
-    const embedUrl = `https://player-ticto.pandavideo.com.br/embed/?v=${videoData.id}`;
+      // 4. Montagem Estrita da URL Ticto
+      const embedUrl = getPandaEmbedUrl(videoDetails, playbackId);
 
-    // 4. Atualização de Estado Imutável
-    const updated = [...videos];
-    updated[currentEditingLessonIndex] = {
-      ...updated[currentEditingLessonIndex],
-      title: videoData.title || updated[currentEditingLessonIndex].title,
-      link: embedUrl,
-      duration: durationInMinutes
-    };
+      // 5. Diagnóstico e Fix de Duração
+      const rawSeconds = videoDetails.length ? Number(videoDetails.length) : 
+                        (videoDetails.duration ? Number(videoDetails.duration) : 0);
+      const durationInMinutes = rawSeconds > 0 ? Math.round(rawSeconds / 60) : 0;
 
-    // 5. Salva a memória da pasta de onde este vídeo saiu
-    if (videoData.folder_id) {
-      setLastPandaFolderId(videoData.folder_id);
+      // 6. Atualização de Estado Imutável
+      const updated = [...videos];
+      updated[currentEditingLessonIndex] = {
+        ...updated[currentEditingLessonIndex],
+        title: videoDetails.title || videoDetails.name || updated[currentEditingLessonIndex].title,
+        link: embedUrl,
+        duration: durationInMinutes
+      };
+
+      // 7. Salva a memória da pasta
+      if (videoDetails.folder_id) {
+        setLastPandaFolderId(videoDetails.folder_id);
+      }
+
+      setVideos(updated);
+      setIsPandaSelectorOpen(false);
+      setCurrentEditingLessonIndex(null);
+      toast.success("Vídeo selecionado com sucesso!", { id: toastId });
+    } catch (error) {
+      console.error("Erro ao selecionar vídeo do Panda:", error);
+      toast.error("Erro ao carregar os detalhes do vídeo.", { id: toastId });
+    } finally {
+      setIsSelectingVideo(false);
     }
-
-    setVideos(updated);
-    setIsPandaSelectorOpen(false);
-    setCurrentEditingLessonIndex(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

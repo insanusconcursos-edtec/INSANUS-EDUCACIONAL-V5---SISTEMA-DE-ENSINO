@@ -171,8 +171,12 @@ async function startServer() {
       const videos = data.videos || data || [];
       
       // Retorna ID, Título e URL de Embed se disponível
-      const cleanVideos = Array.isArray(videos) ? videos.map((v: PandaVideo) => ({
-        id: v.id || v.video_id,
+      const cleanVideos = Array.isArray(videos) ? videos.map((v: any) => ({
+        id: v.id,
+        video_id: v.video_id || v.id,
+        panda_id: v.video_id || v.id,
+        external_id: v.external_id || null,
+        playback_id: v.playback_id || null,
         title: v.title || v.name || 'Sem título',
         video_player_url: v.video_player_url || v.embed_url || null,
         length: v.length || 0,
@@ -183,6 +187,38 @@ async function startServer() {
     } catch (error) {
       console.error("Erro ao listar vídeos do Panda:", error);
       return res.status(500).json({ success: false, error: "Falha ao carregar vídeos do Panda." });
+    }
+  });
+
+  // Rota de Detalhes de um Vídeo do Panda
+  app.get('/api/panda-video-details', async (req, res) => {
+    try {
+      const apiKey = process.env.PANDA_API_KEY;
+      const videoId = req.query.id as string;
+
+      if (!videoId) {
+        return res.status(400).json({ success: false, error: "ID do vídeo é obrigatório." });
+      }
+
+      const url = `https://api-v2.pandavideo.com.br/videos/${videoId}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': apiKey,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro na API do Panda: ${response.status}`);
+      }
+
+      const video = await response.json();
+      return res.status(200).json({ success: true, video });
+    } catch (error) {
+      console.error("Erro ao buscar detalhes do vídeo do Panda:", error);
+      return res.status(500).json({ success: false, error: "Falha ao carregar detalhes do vídeo do Panda." });
     }
   });
 
@@ -384,8 +420,12 @@ async function startServer() {
       // Ordenação alfabética dos vídeos
       strictVideos.sort((a, b) => (a.title || a.name || '').localeCompare(b.title || b.name || ''));
 
-      const videos = strictVideos.map((v) => ({
-        id: v.id || v.video_id,
+      const videos = strictVideos.map((v: any) => ({
+        id: v.id,
+        video_id: v.video_id || v.id,
+        panda_id: v.video_id || v.id,
+        external_id: v.external_id || null,
+        playback_id: v.playback_id || null,
         title: v.title || v.name || 'Sem título',
         video_player_url: v.video_player_url || v.embed_url || null,
         length: v.length || 0,
@@ -438,16 +478,20 @@ async function startServer() {
   function extractPandaId(url: string): string | null {
     try {
       if (!url) return null;
-      if (!url.includes('http')) return url;
+      if (!url.includes('http')) return url.split('?v=')[1] || url.split('/embed/')[1] || url.split('/video/')[1] || url;
       
       const urlObj = new URL(url);
       const v = urlObj.searchParams.get('v');
       if (v) return v;
 
       const pathParts = urlObj.pathname.split('/').filter(Boolean);
+      // Se a URL for do tipo .../embed/ID ou .../video/ID
+      if (url.includes('/embed/') || url.includes('/video/')) {
+        return pathParts[pathParts.length - 1];
+      }
+      
       return pathParts[pathParts.length - 1] || url;
     } catch (_) {
-      // Error ignored intentionally
       return url;
     }
   }

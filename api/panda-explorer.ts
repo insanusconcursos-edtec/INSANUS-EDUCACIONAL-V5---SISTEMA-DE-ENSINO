@@ -88,8 +88,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     strictVideos.sort((a, b) => (a.title || a.name || '').localeCompare(b.title || b.name || ''));
 
-    const videos = strictVideos.map((v) => ({
-      id: v.id || v.video_id,
+    const videos = strictVideos.map((v: any) => ({
+      id: v.id,
+      video_id: v.video_id || v.id,
+      panda_id: v.video_id || v.id,
+      external_id: v.external_id || null,
+      playback_id: v.playback_id || null,
       title: v.title || v.name || 'Sem título',
       video_player_url: v.video_player_url || v.embed_url || null
     }));

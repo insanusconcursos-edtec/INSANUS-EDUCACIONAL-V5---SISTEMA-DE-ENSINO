@@ -9,6 +9,8 @@ import { CourseContentManager } from './CourseContentManager';
 import ConfirmationModal from '../../ui/ConfirmationModal';
 import CategoryManager from '../CategoryManager';
 
+import toast from 'react-hot-toast';
+
 export function AdminCoursesTab() {
   // Estados de Dados
   const [courses, setCourses] = useState<OnlineCourse[]>([]);
@@ -101,13 +103,15 @@ export function AdminCoursesTab() {
 
   const handleDuplicateCourse = async () => {
     if (courseToDuplicate) {
-        setIsProcessing(true);
+      setIsProcessing(true);
       try {
         await courseService.duplicateCourse(courseToDuplicate);
+        toast.success("Curso duplicado com sucesso!");
         await loadData();
         setCourseToDuplicate(null);
       } catch (error) {
-         console.error(error);
+        console.error("Erro ao duplicar curso:", error);
+        toast.error("Erro ao duplicar o curso. Verifique o console.");
       } finally {
         setIsProcessing(false);
       }

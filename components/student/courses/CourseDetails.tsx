@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { OnlineCourse, CourseModule, CONTEST_STATUS_LABELS, CourseStructureModule } from '../../../types/course';
 import { courseService } from '../../../services/courseService';
+import { liveEventService } from '../../../services/liveEventService';
+import { LiveEvent } from '../../../types/liveEvent';
 import { StudentModuleCard } from './StudentModuleCard';
 import { CoursePlayer } from './player/CoursePlayer';
 import { useAuth } from '../../../contexts/AuthContext';
-import { CheckCircle2, LayoutList, ListTree, PlayCircle, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, LayoutList, ListTree, PlayCircle, ArrowLeft, Radio, Video, Clock, Play, Calendar } from 'lucide-react';
 import { StudentCourseEdital } from './edital/StudentCourseEdital';
 import { CourseReviewDashboard } from './reviews/CourseReviewDashboard';
 
@@ -17,13 +19,15 @@ interface CourseDetailsProps {
 
 export function CourseDetails({ course, onBack }: CourseDetailsProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   
-  // ESTADO DAS ABAS (NOVO) - MÓDULOS ou EDITAL
-  const [activeTab, setActiveTab] = useState<'MODULES' | 'EDITAL'>('MODULES');
+  // ESTADO DAS ABAS (NOVO) - MÓDULOS, EDITAL ou LIVE
+  const [activeTab, setActiveTab] = useState<'MODULES' | 'EDITAL' | 'LIVE'>('MODULES');
   const [focusTopicId, setFocusTopicId] = useState<string | null>(null);
 
   const [modules, setModules] = useState<CourseModule[]>([]);
+  const [courseLiveEvents, setCourseLiveEvents] = useState<LiveEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedModule, setSelectedModule] = useState<CourseModule | null>(null);
   
@@ -35,13 +39,15 @@ export function CourseDetails({ course, onBack }: CourseDetailsProps) {
   useEffect(() => {
     const loadData = async () => {
         try {
-            // 1. Carrega Módulos e Estrutura Completa
-            const [modulesData, structureData] = await Promise.all([
+            // 1. Carrega Módulos, Estrutura e Eventos ao Vivo
+            const [modulesData, structureData, liveEventsData] = await Promise.all([
                 courseService.getModules(course.id),
-                courseService.getCourseStructure(course.id)
+                courseService.getCourseStructure(course.id),
+                liveEventService.getLiveEventsByOnlineCourse(course.id)
             ]);
             setModules(modulesData);
             setStructure(structureData);
+            setCourseLiveEvents(liveEventsData);
 
             // 2. Calcula Progresso Geral
             if (currentUser) {
@@ -245,6 +251,18 @@ export function CourseDetails({ course, onBack }: CourseDetailsProps) {
                 <ListTree size={18} />
                 Edital Verticalizado
             </button>
+
+            {courseLiveEvents.length > 0 && (
+                <button 
+                    onClick={() => setActiveTab('LIVE')}
+                    className={`flex items-center gap-2 pb-4 px-1 border-b-2 font-bold text-xs uppercase tracking-widest transition-all
+                        ${activeTab === 'LIVE' ? 'border-red-600 text-white' : 'border-transparent text-gray-500 hover:text-gray-300'}
+                    `}
+                >
+                    <Radio size={18} className={activeTab === 'LIVE' ? 'text-red-600' : ''} />
+                    🔴 Eventos ao Vivo
+                </button>
+            )}
           </div>
 
           {/* CONTEÚDO CONDICIONAL */}
@@ -268,12 +286,85 @@ export function CourseDetails({ course, onBack }: CourseDetailsProps) {
                           ))}
                       </div>
                   )
-              ) : (
+              ) : activeTab === 'EDITAL' ? (
                   // VISÃO DO EDITAL VERTICALIZADO
                   <StudentCourseEdital 
                     courseId={course.id} 
                     focusTopicId={focusTopicId} 
                   />
+              ) : (
+                  // VISÃO DOS EVENTOS AO VIVO
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      {courseLiveEvents.map((event) => (
+                          <div 
+                              key={event.id}
+                              className="group bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden hover:border-red-600/50 transition-all duration-300 flex flex-col"
+                          >
+                              {/* Thumbnail */}
+                              <div className="relative aspect-video overflow-hidden bg-zinc-800">
+                                  {event.thumbnailUrl ? (
+                                      <img 
+                                          src={event.thumbnailUrl} 
+                                          alt={event.title}
+                                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                          referrerPolicy="no-referrer"
+                                      />
+                                  ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-zinc-600">
+                                          <Video size={48} />
+                                      </div>
+                                  )}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
+                                  
+                                  {/* Status Badge */}
+                                  <div className="absolute top-4 left-4">
+                                      {event.status === 'live' ? (
+                                          <div className="flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.5)]">
+                                              <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                                              Ao Vivo Agora
+                                          </div>
+                                      ) : (
+                                          <div className="flex items-center gap-2 bg-zinc-800/90 backdrop-blur-md text-zinc-300 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-zinc-700">
+                                              <Clock size={10} />
+                                              {event.status === 'scheduled' ? 'Agendado' : 'Encerrado'}
+                                          </div>
+                                      )}
+                                  </div>
+                              </div>
+
+                              {/* Info */}
+                              <div className="p-5 flex-1 flex flex-col gap-4">
+                                  <div className="space-y-2">
+                                      <h3 className="text-white font-black text-lg uppercase tracking-tight line-clamp-2 group-hover:text-red-500 transition-colors">
+                                          {event.title}
+                                      </h3>
+                                      <div className="flex items-center gap-4 text-zinc-500 font-bold text-[10px] uppercase tracking-widest">
+                                          <div className="flex items-center gap-1.5">
+                                              <Calendar size={12} className="text-red-600" />
+                                              {event.eventDate.split('-').reverse().join('/')}
+                                          </div>
+                                          <div className="flex items-center gap-1.5">
+                                              <Clock size={12} />
+                                              {event.startTime}
+                                          </div>
+                                      </div>
+                                  </div>
+
+                                  <button 
+                                      onClick={() => navigate(`/app/eventos-ao-vivo/sala/${event.id}`)}
+                                      className={`w-full mt-auto flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 group/btn ${
+                                          event.status === 'live' 
+                                              ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-900/20' 
+                                              : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                                      }`}
+                                  >
+                                      <Play size={14} fill="currentColor" className="group-hover/btn:scale-110 transition-transform" />
+                                      {event.status === 'live' ? 'ACESSAR SALA DE TRANSMISSÃO' : 'VER DETALHES DO EVENTO'}
+                                  </button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
               )}
           </div>
       </div>

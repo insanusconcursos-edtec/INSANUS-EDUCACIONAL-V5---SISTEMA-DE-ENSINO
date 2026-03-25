@@ -3,13 +3,15 @@
  * Handles API calls to Panda Video via the Backend routes (/api/panda-videos, /api/panda-explorer)
  */
 
+import { PandaVideo } from '../utils/pandaUtils';
+
 export const pandaService = {
   /**
    * List videos from Panda Video (via Backend)
    * @param search Optional search term
    * @returns List of videos
    */
-  async listVideos(search: string = '') {
+  async listVideos(search: string = ''): Promise<PandaVideo[]> {
     try {
       const url = `/api/panda-videos?search=${encodeURIComponent(search)}`;
 
@@ -37,7 +39,7 @@ export const pandaService = {
    * @param folderId Optional folder ID
    * @returns Folders and videos
    */
-  async explorer(folderId: string | null = null) {
+  async explorer(folderId: string | null = null): Promise<{ folders: any[], videos: PandaVideo[] }> {
     try {
       let url = '/api/panda-explorer';
       if (folderId && folderId !== 'root' && folderId !== 'null') {
@@ -62,6 +64,34 @@ export const pandaService = {
       };
     } catch (error) {
       console.error("Erro no Explorer do Panda:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get details of a single video from Panda Video (via Backend)
+   * @param videoId The ID of the video
+   * @returns Full video details
+   */
+  async getVideoDetails(videoId: string): Promise<PandaVideo> {
+    try {
+      const url = `/api/panda-video-details?id=${videoId}`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro na API do Backend: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.video;
+    } catch (error) {
+      console.error("Erro ao buscar detalhes do vídeo do Panda:", error);
       throw error;
     }
   }

@@ -6,12 +6,14 @@ import { classScheduleService } from '../../../services/classScheduleService';
 import { curriculumService } from '../../../services/curriculumService';
 import { Class } from '../../../types/class';
 import { OnlineCourse, CourseModule } from '../../../types/course';
-import { ArrowLeft, Calendar, GraduationCap, BookOpen, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Calendar, GraduationCap, BookOpen, ChevronDown, Radio, Video, Clock, Play } from 'lucide-react';
 import { StudentClassSchedule } from '../../../components/student/presential/StudentClassSchedule';
 import { StudentModuleCard } from '../../../components/student/courses/StudentModuleCard';
 import { CoursePlayer } from '../../../components/student/courses/player/CoursePlayer';
 import { StudentPedagogicalPlanning } from '../../../components/student/presential/StudentPedagogicalPlanning';
 import { ConcursoStatusBanner } from '../../../components/student/presential/ConcursoStatusBanner';
+import { liveEventService } from '../../../services/liveEventService';
+import { LiveEvent } from '../../../types/liveEvent';
 
 export const StudentPresentialDetails: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
@@ -20,8 +22,9 @@ export const StudentPresentialDetails: React.FC = () => {
   const moduleIdParam = searchParams.get('module');
   
   const [currentClass, setCurrentClass] = useState<Class | null>(null);
-  const [activeTab, setActiveTab] = useState<'SCHEDULE' | 'PLANNING' | 'TEACHING'>('TEACHING');
+  const [activeTab, setActiveTab] = useState<'SCHEDULE' | 'PLANNING' | 'TEACHING' | 'LIVE'>('TEACHING');
   const [loading, setLoading] = useState(true);
+  const [classLiveEvents, setClassLiveEvents] = useState<LiveEvent[]>([]);
   
   // Tab availability flags
   const [hasModules, setHasModules] = useState(false);
@@ -37,7 +40,8 @@ export const StudentPresentialDetails: React.FC = () => {
     { id: 'TEACHING', label: 'ÁREA DE ENSINO', icon: GraduationCap, show: hasModules },
     { id: 'SCHEDULE', label: 'CRONOGRAMA', icon: Calendar, show: hasSchedule },
     { id: 'PLANNING', label: 'PLANEJAMENTO PEDAGÓGICO', icon: BookOpen, show: hasPlanning },
-  ].filter(tab => tab.show), [hasModules, hasSchedule, hasPlanning]);
+    { id: 'LIVE', label: '🔴 EVENTOS AO VIVO', icon: Radio, show: classLiveEvents.length > 0 },
+  ].filter(tab => tab.show), [hasModules, hasSchedule, hasPlanning, classLiveEvents]);
 
   useEffect(() => {
     const fetchClass = async () => {
@@ -48,26 +52,30 @@ export const StudentPresentialDetails: React.FC = () => {
             setCurrentClass(data);
             
             // Check content availability in parallel
-            const [modulesData, eventsData, subjectsData] = await Promise.all([
+            const [modulesData, eventsData, subjectsData, liveEventsData] = await Promise.all([
               courseService.getModules(classId),
               classScheduleService.getScheduleEventsByClass(classId),
-              curriculumService.getSubjectsByClass(classId)
+              curriculumService.getSubjectsByClass(classId),
+              liveEventService.getLiveEventsByPresentialClass(classId)
             ]);
             
             const hModules = modulesData.length > 0;
             const hSchedule = eventsData.length > 0;
             const hPlanning = subjectsData.length > 0;
+            const hLive = liveEventsData.length > 0;
             
             setHasModules(hModules);
             setHasSchedule(hSchedule);
             setHasPlanning(hPlanning);
             setModules(modulesData);
+            setClassLiveEvents(liveEventsData);
 
             // Adjust active tab if current one is hidden
             const availableIds = [
               ...(hModules ? ['TEACHING'] : []),
               ...(hSchedule ? ['SCHEDULE'] : []),
-              ...(hPlanning ? ['PLANNING'] : [])
+              ...(hPlanning ? ['PLANNING'] : []),
+              ...(hLive ? ['LIVE'] : [])
             ];
 
             if (availableIds.length > 0 && !availableIds.includes(activeTab)) {
@@ -294,6 +302,83 @@ export const StudentPresentialDetails: React.FC = () => {
             classId={currentClass.id} 
             totalMeetings={currentClass.totalMeetings}
           />
+        )}
+
+        {activeTab === 'LIVE' && classLiveEvents.length > 0 && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {classLiveEvents.map((event) => (
+                <div 
+                  key={event.id} 
+                  className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden flex flex-col group hover:border-zinc-700 transition-colors"
+                >
+                  {/* Thumbnail */}
+                  <div className="relative aspect-video bg-zinc-800">
+                    {event.thumbnailUrl ? (
+                      <img 
+                        src={event.thumbnailUrl} 
+                        alt={event.title} 
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-zinc-600">
+                        <Video size={48} />
+                      </div>
+                    )}
+                    
+                    {/* Status Badge */}
+                    <div className="absolute top-3 right-3">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase shadow-lg ${
+                        event.status === 'live' ? 'bg-red-600 text-white animate-pulse' :
+                        event.status === 'scheduled' ? 'bg-blue-600 text-white' :
+                        'bg-zinc-800 text-zinc-400'
+                      }`}>
+                        {event.status === 'live' ? 'AO VIVO AGORA' : event.status === 'scheduled' ? 'AGENDADO' : 'ENCERRADO'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-5 flex flex-col flex-1">
+                    <h3 className="text-lg font-bold text-white mb-1 line-clamp-2">{event.title}</h3>
+                    {event.subtitle && (
+                      <p className="text-zinc-400 text-sm mb-4 line-clamp-2">{event.subtitle}</p>
+                    )}
+                    
+                    <div className="mt-auto space-y-2 mb-6">
+                      <div className="flex items-center gap-2 text-zinc-300 text-sm">
+                        <Calendar size={16} className="text-zinc-500" />
+                        <span>{event.eventDate.split('-').reverse().join('/')}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-zinc-300 text-sm">
+                        <Clock size={16} className="text-zinc-500" />
+                        <span>{event.startTime}</span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => navigate(`/app/eventos-ao-vivo/sala/${event.id}`)}
+                      className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+                        event.status === 'live' 
+                          ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-900/20' 
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                      }`}
+                    >
+                      {event.status === 'live' ? (
+                        <>
+                          <Play size={18} fill="currentColor" />
+                          ACESSAR SALA DE TRANSMISSÃO
+                        </>
+                      ) : (
+                        'VER DETALHES DO EVENTO'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

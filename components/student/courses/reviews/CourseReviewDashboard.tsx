@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { courseReviewService, CourseReview } from '../../../../services/courseReviewService';
+import { courseService } from '../../../../services/courseService';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { AlertCircle, CalendarClock, CheckCircle2, ChevronRight, ChevronDown } from 'lucide-react';
 
@@ -11,8 +12,31 @@ export function CourseReviewDashboard({ courseId, onReviewNow }: { courseId: str
     const fetchReviews = async () => {
         if (!user) return;
         try {
-            const data = await courseReviewService.getPendingReviews(user.uid, courseId);
-            setReviews(data);
+            const [reviewsData, editalData] = await Promise.all([
+                courseReviewService.getPendingReviews(user.uid, courseId),
+                courseService.getCourseEdital(courseId)
+            ]);
+
+            // Mapeamento de Tópicos Ativos para Filtro de Registros Órfãos
+            const activeTopicIds = new Set<string>();
+            if (editalData) {
+                editalData.disciplines.forEach(discipline => {
+                    const collectIds = (topics: any[]) => {
+                        topics.forEach(topic => {
+                            activeTopicIds.add(topic.id);
+                            if (topic.subtopics && topic.subtopics.length > 0) {
+                                collectIds(topic.subtopics);
+                            }
+                        });
+                    };
+                    collectIds(discipline.topics);
+                });
+            }
+
+            // Filtragem em Tempo de Leitura: Remove revisões de tópicos excluídos
+            const validReviews = reviewsData.filter(review => activeTopicIds.has(review.topicId));
+            
+            setReviews(validReviews);
         } catch (error) {
             console.error("Erro ao buscar revisões:", error);
         } finally {

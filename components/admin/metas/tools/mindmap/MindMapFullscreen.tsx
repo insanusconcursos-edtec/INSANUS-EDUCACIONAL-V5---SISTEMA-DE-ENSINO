@@ -261,6 +261,92 @@ const MindMapFullscreen: React.FC<MindMapFullscreenProps> = ({ nodes, onChange, 
             collapsed: false // Expand parent to show new child
         }));
     });
+
+    // Auto-focus on the new subtopic
+    setSelectedId(newNode.id);
+  };
+
+  const handleReorder = (id: string, direction: 'up' | 'down') => {
+    if (readOnly || !treeData) return;
+    
+    const nodeToMove = findNode(treeData, id);
+    if (!nodeToMove || !nodeToMove.parentId) return;
+
+    const parentId = nodeToMove.parentId;
+
+    setTreeData(prev => {
+        if (!prev) return null;
+        return modifyTree(prev, parentId, (parent) => {
+            if (!parent.children) return parent;
+            const newChildren = [...parent.children];
+            const index = newChildren.findIndex(c => c.id === id);
+            if (index === -1) return parent;
+
+            const targetIndex = direction === 'up' ? index - 1 : index + 1;
+            if (targetIndex < 0 || targetIndex >= newChildren.length) return parent;
+
+            // Swap imutável
+            const temp = newChildren[index];
+            newChildren[index] = newChildren[targetIndex];
+            newChildren[targetIndex] = temp;
+
+            return { ...parent, children: newChildren };
+        });
+    });
+  };
+
+  const handleMoveNode = (draggedId: string, targetId: string) => {
+    if (readOnly || !treeData || draggedId === targetId) return;
+
+    // 1. Validação: Impedir ciclos (não pode soltar em si mesmo ou descendente)
+    const draggedNode = findNode(treeData, draggedId);
+    if (!draggedNode) return;
+
+    const isDescendant = (parent: TreeNode, id: string): boolean => {
+      if (!parent.children) return false;
+      return parent.children.some(child => child.id === id || isDescendant(child, id));
+    };
+
+    if (isDescendant(draggedNode, targetId)) return;
+
+    // 2. Re-parenting Imutável
+    setTreeData(prev => {
+      if (!prev) return null;
+
+      // Se tentar mover a raiz, ignorar (raiz não tem pai)
+      if (prev.id === draggedId) return prev;
+
+      let extractedNode: TreeNode | null = null;
+
+      // Função para remover o nó e capturá-lo
+      const removeAndCapture = (node: TreeNode): TreeNode => {
+        if (node.children) {
+          const foundIndex = node.children.findIndex(c => c.id === draggedId);
+          if (foundIndex !== -1) {
+            extractedNode = node.children[foundIndex];
+            const newChildren = [...node.children];
+            newChildren.splice(foundIndex, 1);
+            return { ...node, children: newChildren };
+          }
+          return {
+            ...node,
+            children: node.children.map(removeAndCapture)
+          };
+        }
+        return node;
+      };
+
+      const treeWithoutNode = removeAndCapture(prev);
+      if (!extractedNode) return prev;
+
+      // Inserir no novo pai
+      const nodeWithNewParent = { ...extractedNode, parentId: targetId };
+      return modifyTree(treeWithoutNode, targetId, (parent) => ({
+        ...parent,
+        children: [...(parent.children || []), nodeWithNewParent],
+        collapsed: false // Expandir para mostrar o novo filho
+      }));
+    });
   };
 
   const handleDeleteNode = (id: string) => {
@@ -377,6 +463,7 @@ const MindMapFullscreen: React.FC<MindMapFullscreenProps> = ({ nodes, onChange, 
                     onSelect={handleSelectNode}
                     onToggle={(id) => handleUpdateNode(id, { collapsed: !findNode(treeData, id)?.collapsed })}
                     onEdit={handleUpdateNode}
+                    onMoveNode={handleMoveNode}
                     onViewNotes={setViewingNotesId}
                     readOnly={readOnly}
                 />
@@ -393,7 +480,7 @@ const MindMapFullscreen: React.FC<MindMapFullscreenProps> = ({ nodes, onChange, 
                 onAddChild={handleAddChild}
                 onDelete={handleDeleteNode}
                 onClose={() => setSelectedId(null)}
-                onReorder={() => {}} 
+                onReorder={handleReorder} 
                 onAddNote={handleAddNote}
             />
         )}

@@ -37,13 +37,18 @@ const dbAdmin = admin.firestore();
 function extractPandaId(url: string): string | null {
   try {
     if (!url) return null;
-    if (!url.includes('http')) return url;
+    if (!url.includes('http')) return url.split('?v=')[1] || url.split('/embed/')[1] || url.split('/video/')[1] || url;
     
     const urlObj = new URL(url);
     const v = urlObj.searchParams.get('v');
     if (v) return v;
 
     const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    // Se a URL for do tipo .../embed/ID ou .../video/ID
+    if (url.includes('/embed/') || url.includes('/video/')) {
+      return pathParts[pathParts.length - 1];
+    }
+    
     return pathParts[pathParts.length - 1] || url;
   } catch (_e) {
     return url;

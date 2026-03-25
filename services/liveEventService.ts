@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, arrayUnion, arrayRemove, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from './firebase';
 import { LiveEvent, LiveEventMaterial, LiveEventChatMessage } from '../types/liveEvent';
@@ -6,6 +6,36 @@ import { LiveEvent, LiveEventMaterial, LiveEventChatMessage } from '../types/liv
 const COLLECTION_NAME = 'live_events';
 
 export const liveEventService = {
+  getLiveEventsByPresentialClass: async (classId: string): Promise<LiveEvent[]> => {
+    try {
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        where("accessControl.presentialClasses", "array-contains", classId),
+        where("status", "!=", "ended")
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveEvent));
+    } catch (error) {
+      console.error("Error fetching live events by class:", error);
+      return [];
+    }
+  },
+
+  getLiveEventsByOnlineCourse: async (courseId: string): Promise<LiveEvent[]> => {
+    try {
+      const q = query(
+        collection(db, COLLECTION_NAME),
+        where("accessControl.onlineCourses", "array-contains", courseId),
+        where("status", "!=", "ended")
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveEvent));
+    } catch (error) {
+      console.error("Error fetching live events by course:", error);
+      return [];
+    }
+  },
+
   getLiveEvents: async (): Promise<LiveEvent[]> => {
     const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);

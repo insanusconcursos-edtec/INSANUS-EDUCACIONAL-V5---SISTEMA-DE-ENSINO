@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'react-hot-toast';
 import { X, Save, Loader2, Upload, Search, Folder, ChevronLeft, PlayCircle } from 'lucide-react';
 import { CourseContent, ContentType } from '../../../../../types/course';
 import { courseService } from '../../../../../services/courseService';
 import { RichTextEditor } from '../../../../ui/RichTextEditor';
 import { pandaService } from '../../../../../services/pandaService';
+import { extractPandaVideoId, getPandaEmbedUrl, PandaVideo } from '../../../../../utils/pandaUtils';
 
 interface ContentModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export function ContentModal({ isOpen, onClose, onSave, initialData, lessonId }:
   
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [existingPdfUrl, setExistingPdfUrl] = useState('');
+  const [selectingVideo, setSelectingVideo] = useState(false);
   
   // Panda Media Picker
   const [showPandaPicker, setShowPandaPicker] = useState(false);
@@ -98,19 +101,51 @@ export function ContentModal({ isOpen, onClose, onSave, initialData, lessonId }:
     setPandaSearch('');
   };
 
-  const handleSelectPandaVideo = (video: {id: string, video_player_url?: string}) => {
-    // Se a API já trouxe a URL de embed, usamos ela.
-    // Caso contrário, usamos o fallback com o prefixo conhecido.
-    let url = video.video_player_url;
+  const handleSelectPandaVideo = async (video: PandaVideo) => {
+    if (selectingVideo) return;
     
-    if (!url) {
-        const prefix = "player-vz-7e3a486e-b650-033c20cfb31e"; // Fallback
-        url = `https://${prefix}.tv.pandavideo.com.br/embed/?v=${video.id}`;
-    }
+    const toastId = toast.loading("Buscando link do vídeo...");
+    try {
+      setSelectingVideo(true);
+      
+      // 1. Busca os detalhes completos do vídeo para garantir o Playback ID
+      const videoDetails = await pandaService.getVideoDetails(video.id);
+      
+      if (!videoDetails) {
+        throw new Error("Não foi possível carregar os detalhes do vídeo.");
+      }
 
-    setVideoUrl(url);
-    setVideoPlatform('panda');
-    setShowPandaPicker(false);
+      // 2. Extração rigorosa (Parser de URL via utilitário)
+      const playbackId = extractPandaVideoId(videoDetails);
+
+      // 3. Trava de Segurança Definitiva (Fail-Fast)
+      if (!playbackId) {
+        toast.error("Falha Crítica: Playback ID não encontrado.", { id: toastId });
+        console.error("Falha Crítica: Playback ID não encontrado nas URLs. Objeto:", videoDetails);
+        alert("Erro: Este vídeo não possui uma URL de embed pública válida no Panda. O vídeo pode estar processando ou com o embed desativado no painel do Panda Vídeo.");
+        return; // Impede a montagem de um player quebrado
+      }
+
+      // 4. Montagem Estrita da URL Ticto
+      const tictoEmbedUrl = getPandaEmbedUrl(videoDetails, playbackId);
+
+      // 5. Injeção no formulário
+      setVideoUrl(tictoEmbedUrl);
+      
+      // Injeta o título do vídeo automaticamente
+      if (videoDetails.title || videoDetails.name) {
+          setTitle(videoDetails.title || videoDetails.name);
+      }
+
+      setVideoPlatform('panda');
+      setShowPandaPicker(false);
+      toast.success("Vídeo selecionado com sucesso!", { id: toastId });
+    } catch (error) {
+      console.error("Erro ao selecionar vídeo do Panda:", error);
+      toast.error("Erro ao carregar os detalhes do vídeo.", { id: toastId });
+    } finally {
+      setSelectingVideo(false);
+    }
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
