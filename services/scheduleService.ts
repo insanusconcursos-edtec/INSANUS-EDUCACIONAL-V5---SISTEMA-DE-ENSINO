@@ -308,9 +308,19 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
       return pages * readingSpeed * semiActiveMaterial || Number(task.duration) || 30;
     }
     if (type === 'LEI_SECA' || type === 'LEI SECA' || type === 'law' || type === 'lei_seca' || type === 'lei seca') {
-      const pages = Number(task.lawConfig?.pages) || Number(task.pages) || 0;
-      const multiplier = Number(task.multiplier || task.lawConfig?.multiplier) || 1;
-      return pages * readingSpeed * semiActiveLaw * multiplier || Number(task.duration) || 30;
+      // 1. Extrai e força a conversão para número (evita "1" * 2 = NaN)
+      const pagesCount = Number(task.pages || task.lawConfig?.pages || task.pageCount) || 1; 
+      
+      // 2. Extrai o fator multiplicativo (multiplier, speed, speedFactor)
+      const multiplierValue = Number(task.multiplier || task.speed || task.lawConfig?.multiplier || task.lawConfig?.speedFactor) || 1; 
+      
+      // 3. Aplica a fórmula matemática exata do PRD (2 minutos por página * fator)
+      const calculatedDuration = (pagesCount * 2) * multiplierValue;
+      
+      // 4. Sobrescreve a duração da tarefa ANTES de enviar para o agendador (com fallback de segurança extremo de 2 min)
+      const finalDuration = calculatedDuration > 0 ? calculatedDuration : 2;
+      task.duration = finalDuration; 
+      return finalDuration;
     }
     if (type === 'QUESTOES' || type === 'QUESTÕES' || type === 'questions' || type === 'questoes' || type === 'questões') {
       return Number(task.questionsConfig?.estimatedTime || task.duration) || 30;
@@ -377,6 +387,7 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
     'lei_seca': 'law',
     'lei seca': 'law',
     'lei': 'law',
+    'law': 'law',
     'questões': 'questions',
     'questoes': 'questions',
     'questions': 'questions',
@@ -459,7 +470,7 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
     let flashcards = [...(task.flashcards || task.reviewConfig?.flashcards || task.flashcardConfig?.cards || [])];
     let questions = [...(task.questions || task.questionsConfig?.questions || [])];
 
-    const isSplittableType = ['material', 'questions', 'law', 'lesson', 'questões', 'questoes', 'lei_seca', 'lei seca', 'pdf'].includes(normalizedType);
+    const isSplittableType = ['material', 'questions', 'lesson', 'questões', 'questoes', 'pdf'].includes(normalizedType);
 
     // 1. RASTREADOR DE DIVISÃO REAL (willSplit)
     let tempCapacity = currentDayCapacity;
@@ -475,7 +486,8 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
         }
 
         if (!isSplittableType && tempRemaining > tempCapacity) {
-            if (tempCapacity > 0) {
+            const maxDayCapacity = safeRoutine[tempDayOfWeek as keyof StudentRoutine] || 0;
+            if (tempCapacity < maxDayCapacity && maxDayCapacity > 0) {
                 tempCapacity = 0; // Force next day
                 continue;
             }
@@ -501,7 +513,8 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
 
       // 4. CUIDADO COM INDIVISÍVEIS
       if (!isSplittableType && remainingDuration > currentDayCapacity) {
-        if (currentDayCapacity > 0) {
+        const maxDayCapacity = safeRoutine[currentDayOfWeek as keyof StudentRoutine] || 0;
+        if (currentDayCapacity < maxDayCapacity && maxDayCapacity > 0) {
             currentDayCapacity = 0; // Zera a capacidade atual e empurra para o próximo dia válido
             continue;
         }
@@ -879,9 +892,19 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
     delete task.willSplit;
     delete task.isSplitContinuity;
 
-    let remainingDuration = task.calculatedDuration || task.duration || 30;
+    let remainingDuration = task.calculatedDuration || task.duration;
+    if (!remainingDuration || remainingDuration === 30) {
+      if (['law', 'lei_seca', 'lei seca'].includes(normalizedType)) {
+        const pagesCount = Number(task.pages || task.lawConfig?.pages || task.pageCount) || 1; 
+        const multiplierValue = Number(task.multiplier || task.speed || task.lawConfig?.multiplier || task.lawConfig?.speedFactor) || 1; 
+        remainingDuration = (pagesCount * 2) * multiplierValue;
+        if (remainingDuration <= 0) remainingDuration = 2;
+      } else {
+        remainingDuration = remainingDuration || 30;
+      }
+    }
     const originalTotalDuration = task.totalDuration || task.calculatedDuration || task.duration || remainingDuration; 
-    const isSplittableType = ['material', 'questions', 'law', 'lesson', 'questões', 'questoes', 'lei_seca', 'lei seca', 'pdf'].includes(normalizedType);
+    const isSplittableType = ['material', 'questions', 'lesson', 'questões', 'questoes', 'pdf'].includes(normalizedType);
     let lastAllocatedDate: string | null = null;
 
     // Filas de consumo (Lifting)
@@ -909,8 +932,11 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
       lastAllocatedDate = dStr;
 
       if (!isSplittableType && remainingDuration > currentDayCapacity) {
-        currentDayCapacity = 0;
-        continue;
+        const maxDayCapacity = getRealDayCapacity(currentDate);
+        if (currentDayCapacity < maxDayCapacity && maxDayCapacity > 0) {
+          currentDayCapacity = 0;
+          continue;
+        }
       }
 
       let allocated = !isSplittableType ? remainingDuration : Math.min(remainingDuration, currentDayCapacity);
@@ -1294,7 +1320,19 @@ export const scheduleSimuladoManual = async (
   let currentDateStr = currentDate.toISOString().split('T')[0];
   
   const calculateTotalDuration = (task: any): number => {
-    return Number(task.calculatedDuration) || Number(task.duration) || 30;
+    let duration = Number(task.calculatedDuration) || Number(task.duration);
+    if (!duration || duration === 30) {
+      const type = task.type?.toLowerCase()?.trim() || 'lesson';
+      if (['law', 'lei_seca', 'lei seca'].includes(type)) {
+        const pagesCount = Number(task.pages || task.lawConfig?.pages || task.pageCount) || 1; 
+        const multiplierValue = Number(task.multiplier || task.speed || task.lawConfig?.multiplier || task.lawConfig?.speedFactor) || 1; 
+        duration = (pagesCount * 2) * multiplierValue;
+        if (duration <= 0) duration = 2;
+      } else {
+        duration = duration || 30;
+      }
+    }
+    return duration;
   };
 
   for (const task of displacedTasks) {
@@ -1322,7 +1360,7 @@ export const scheduleSimuladoManual = async (
       let isSplit = false;
 
       const type = task.type?.toLowerCase()?.trim() || 'lesson';
-      const isSplittableType = ['material', 'questions', 'law', 'lesson', 'questões', 'questoes', 'lei_seca', 'lei seca', 'pdf'].includes(type);
+      const isSplittableType = ['material', 'questions', 'lesson', 'questões', 'questoes', 'pdf'].includes(type);
 
       if (!isSplittableType) {
         if (allocatedTime > availableCapacity) {
@@ -1460,7 +1498,7 @@ export const anticipateAndShiftGoals = async (
   while (tasksToShift.length > 0 && remainingToday > 0) {
     const task = tasksToShift[0];
     const normalizedType = task.type?.toLowerCase();
-    const isSplittableType = ['material', 'questions', 'law', 'lesson', 'questões', 'questoes', 'lei_seca', 'lei seca', 'pdf'].includes(normalizedType);
+    const isSplittableType = ['material', 'questions', 'lesson', 'questões', 'questoes', 'pdf'].includes(normalizedType);
 
     if (task.calculatedDuration <= remainingToday) {
       // Cabe inteira, retira da fila e agenda para hoje
@@ -1609,7 +1647,18 @@ export const anticipateAndShiftGoals = async (
     delete task.willSplit;
     delete task.isSplitContinuity;
 
-    let remainingDuration = task.calculatedDuration || task.duration || 30;
+    let remainingDuration = task.calculatedDuration || task.duration;
+    if (!remainingDuration || remainingDuration === 30) {
+      const type = task.type?.toLowerCase() || 'lesson';
+      if (['law', 'lei_seca', 'lei seca'].includes(type)) {
+        const pagesCount = Number(task.pages || task.lawConfig?.pages || task.pageCount) || 1; 
+        const multiplierValue = Number(task.multiplier || task.speed || task.lawConfig?.multiplier || task.lawConfig?.speedFactor) || 1; 
+        remainingDuration = (pagesCount * 2) * multiplierValue;
+        if (remainingDuration <= 0) remainingDuration = 2;
+      } else {
+        remainingDuration = remainingDuration || 30;
+      }
+    }
     const originalTotalDuration = task.totalDuration || task.calculatedDuration || task.duration || remainingDuration; // Guarda o tempo original para comparar na fusão
     let willSplit = false;
     let lastAllocatedDate: string | null = null;
@@ -1622,7 +1671,7 @@ export const anticipateAndShiftGoals = async (
     let flashcards = [...(task.flashcards || task.reviewConfig?.flashcards || task.flashcardConfig?.cards || [])];
     let questions = [...(task.questions || task.questionsConfig?.questions || [])];
 
-    const isSplittableType = ['material', 'questions', 'law', 'lesson', 'questões', 'questoes', 'lei_seca', 'lei seca', 'pdf'].includes(normalizedType?.toLowerCase());
+    const isSplittableType = ['material', 'questions', 'lesson', 'questões', 'questoes', 'pdf'].includes(normalizedType?.toLowerCase());
 
     // 1. RASTREADOR DE DIVISÃO REAL (willSplit)
     let tempCapacity = currentDayCapacity;
@@ -1643,7 +1692,8 @@ export const anticipateAndShiftGoals = async (
         }
 
         if (!isSplittableType && tempRemaining > tempCapacity) {
-            if (tempCapacity > 0) {
+            const maxDayCapacity = safeRoutine[tempDayOfWeek as keyof StudentRoutine] || 0;
+            if (tempCapacity < maxDayCapacity && maxDayCapacity > 0) {
                 tempCapacity = 0; // Force next day
                 continue;
             }
@@ -1673,7 +1723,8 @@ export const anticipateAndShiftGoals = async (
 
       // 4. CUIDADO COM INDIVISÍVEIS
       if (!isSplittableType && remainingDuration > currentDayCapacity) {
-        if (currentDayCapacity > 0) {
+        const maxDayCapacity = safeRoutine[currentDate.getDay()] || 0;
+        if (currentDayCapacity < maxDayCapacity && maxDayCapacity > 0) {
             currentDayCapacity = 0; // Zera a capacidade atual e empurra para o próximo dia válido
             continue;
         }

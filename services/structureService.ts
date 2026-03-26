@@ -35,11 +35,8 @@ export interface Topic {
 
 // Helper to get next order
 const getNextOrder = async (collectionRef: any): Promise<number> => {
-    // Mantemos orderBy aqui pois queremos apenas o último COM ordem definida para calcular o próximo
-    const q = query(collectionRef, orderBy('order', 'desc'), limit(1));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return 1;
-    return snapshot.docs[0].data().order + 1;
+    const snapshot = await getDocs(collectionRef);
+    return snapshot.size + 1;
 };
 
 // === FOLDER OPERATIONS (Stored in Plan Document) ===
@@ -165,18 +162,13 @@ export const reorderCycles = async (planId: string, newCycles: Cycle[]) => {
 // === DISCIPLINES (Subcollection of Plans) ===
 
 export const getDisciplines = async (planId: string): Promise<Discipline[]> => {
-  // REMOVIDO orderBy('order') da query para não ocultar documentos sem esse campo
-  const q = query(collection(db, 'plans', planId, 'disciplines'));
-  const snapshot = await getDocs(q);
+  const colRef = collection(db, 'plans', planId, 'disciplines');
+  const snapshot = await getDocs(colRef);
   
-  const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Discipline));
+  const disciplines = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Discipline));
   
-  // Ordenação Client-Side
-  return list.sort((a, b) => {
-    const orderA = a.order ?? 99999; // Joga itens sem ordem para o final
-    const orderB = b.order ?? 99999;
-    return orderA - orderB;
-  });
+  // Sort in memory to handle legacy data without 'order' field
+  return disciplines.sort((a, b) => (a.order || 0) - (b.order || 0));
 };
 
 export const addDiscipline = async (planId: string, name: string, folderId: string | null = null) => {
@@ -230,18 +222,13 @@ export const batchUpdateDisciplines = async (
 // === TOPICS (Subcollection of Disciplines) ===
 
 export const getTopics = async (planId: string, disciplineId: string): Promise<Topic[]> => {
-  // REMOVIDO orderBy('order') da query para não ocultar documentos sem esse campo
-  const q = query(collection(db, 'plans', planId, 'disciplines', disciplineId, 'topics'));
-  const snapshot = await getDocs(q);
+  const colRef = collection(db, 'plans', planId, 'disciplines', disciplineId, 'topics');
+  const snapshot = await getDocs(colRef);
   
-  const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Topic));
+  const topics = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Topic));
   
-  // Ordenação Client-Side
-  return list.sort((a, b) => {
-    const orderA = a.order ?? 99999;
-    const orderB = b.order ?? 99999;
-    return orderA - orderB;
-  });
+  // Sort in memory to handle legacy data without 'order' field
+  return topics.sort((a, b) => (a.order || 0) - (b.order || 0));
 };
 
 export const addTopic = async (planId: string, disciplineId: string, name: string) => {
@@ -273,23 +260,22 @@ export const reorderDiscipline = async (
     if (direction === 'down' && index === items.length - 1) return;
 
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    const currentItem = items[index];
-    const targetItem = items[targetIndex];
-
-    if (!currentItem.id || !targetItem.id) return;
+    
+    // Create new array with swapped items
+    const newItems = [...items];
+    const temp = newItems[index];
+    newItems[index] = newItems[targetIndex];
+    newItems[targetIndex] = temp;
 
     const batch = writeBatch(db);
     
-    // Swap Orders
-    const ref1 = doc(db, 'plans', planId, 'disciplines', currentItem.id);
-    const ref2 = doc(db, 'plans', planId, 'disciplines', targetItem.id);
-
-    // Garante que ambos tenham um valor numérico válido ao trocar
-    const newOrderForCurrent = targetItem.order ?? (index + 1); 
-    const newOrderForTarget = currentItem.order ?? (targetIndex + 1);
-    
-    batch.update(ref1, { order: targetItem.order ?? 0 }); 
-    batch.update(ref2, { order: currentItem.order ?? 0 });
+    // Update ALL items in the list to ensure consistent order
+    newItems.forEach((item, i) => {
+        if (item.id) {
+            const ref = doc(db, 'plans', planId, 'disciplines', item.id);
+            batch.update(ref, { order: i + 1 });
+        }
+    });
 
     await batch.commit();
     await touchPlan(planId);
@@ -306,19 +292,22 @@ export const reorderTopic = async (
     if (direction === 'down' && index === items.length - 1) return;
 
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    const currentItem = items[index];
-    const targetItem = items[targetIndex];
-
-    if (!currentItem.id || !targetItem.id) return;
+    
+    // Create new array with swapped items
+    const newItems = [...items];
+    const temp = newItems[index];
+    newItems[index] = newItems[targetIndex];
+    newItems[targetIndex] = temp;
 
     const batch = writeBatch(db);
     
-    // Swap Orders
-    const ref1 = doc(db, 'plans', planId, 'disciplines', disciplineId, 'topics', currentItem.id);
-    const ref2 = doc(db, 'plans', planId, 'disciplines', disciplineId, 'topics', targetItem.id);
-
-    batch.update(ref1, { order: targetItem.order ?? 0 });
-    batch.update(ref2, { order: currentItem.order ?? 0 });
+    // Update ALL items in the list to ensure consistent order
+    newItems.forEach((item, i) => {
+        if (item.id) {
+            const ref = doc(db, 'plans', planId, 'disciplines', disciplineId, 'topics', item.id);
+            batch.update(ref, { order: i + 1 });
+        }
+    });
 
     await batch.commit();
     await touchPlan(planId);

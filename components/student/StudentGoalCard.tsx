@@ -27,6 +27,7 @@ export interface StudentGoal {
   discipline: string;
   topic: string;
   duration: number; // minutes
+  multiplier?: number; // Multiplicative factor for repetitions
   isCompleted: boolean;
   status?: string; // Add status for compatibility
   observation?: string;
@@ -602,6 +603,19 @@ export const StudentGoalCard: React.FC<StudentGoalCardProps> = ({ goal, onStart,
               <StickyNote size={12} className="text-yellow-500 mt-0.5 shrink-0" />
               <span className="text-[10px] text-yellow-500 font-medium leading-tight">
                   {goal.observation}
+              </span>
+          </div>
+        )}
+
+        {/* REPETITION WARNING FOR LEI SECA */}
+        {goal.type === 'law' && goal.multiplier && goal.multiplier > 1 && !isCardCompleted && (
+          <div 
+            className="mt-3 flex items-start gap-2 bg-brand-red/10 border border-brand-red/20 p-2 rounded-lg animate-pulse"
+            onClick={(e) => e.stopPropagation()}
+          >
+              <AlertTriangle size={12} className="text-brand-red mt-0.5 shrink-0" />
+              <span className="text-[10px] text-brand-red font-black uppercase tracking-tight">
+                  Repita a leitura do documento {goal.multiplier} vezes
               </span>
           </div>
         )}

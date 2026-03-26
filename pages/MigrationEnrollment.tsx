@@ -378,6 +378,9 @@ export default function MigrationEnrollment() {
                   onChange={(e) => setFormData({ ...formData, confirmEmail: e.target.value })}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-600 transition-all"
                 />
+                {formData.confirmEmail && formData.email !== formData.confirmEmail && (
+                  <p className="mt-1 text-red-500 text-[10px] font-bold uppercase tracking-widest">Os e-mails não coincidem.</p>
+                )}
               </div>
 
               <div className="relative">

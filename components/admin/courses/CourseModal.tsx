@@ -23,7 +23,9 @@ export function CourseModal({ isOpen, onClose, onSave, initialData }: CourseModa
     contestStatus: 'SEM_PREVISAO',
     examBoard: '',
     examDate: '',
-    type: 'REGULAR'
+    type: 'REGULAR',
+    welcomeButtonTitle: '',
+    welcomeVideoUrl: ''
   });
   
   const [categories, setCategories] = useState<Category[]>([]);
@@ -37,6 +39,8 @@ export function CourseModal({ isOpen, onClose, onSave, initialData }: CourseModa
   // Estados para Banners (Netflix Style)
   const [bannerDesktopFile, setBannerDesktopFile] = useState<File | null>(null);
   const [bannerMobileFile, setBannerMobileFile] = useState<File | null>(null);
+  const [bannerDesktopPreview, setBannerDesktopPreview] = useState<string>('');
+  const [bannerMobilePreview, setBannerMobilePreview] = useState<string>('');
 
   // Carregar categorias
   useEffect(() => {
@@ -67,8 +71,12 @@ export function CourseModal({ isOpen, onClose, onSave, initialData }: CourseModa
         type: initialData.type || 'REGULAR',
         bannerUrlDesktop: initialData.bannerUrlDesktop,
         bannerUrlMobile: initialData.bannerUrlMobile,
+        welcomeButtonTitle: initialData.welcomeButtonTitle || '',
+        welcomeVideoUrl: initialData.welcomeVideoUrl || ''
       });
       setPreviewUrl(initialData.coverUrl); // Mostra a capa atual
+      setBannerDesktopPreview(initialData.bannerUrlDesktop || '');
+      setBannerMobilePreview(initialData.bannerUrlMobile || '');
     } else {
       // Reset
       setFormData({ 
@@ -81,10 +89,14 @@ export function CourseModal({ isOpen, onClose, onSave, initialData }: CourseModa
           contestStatus: 'SEM_PREVISAO',
           examBoard: '',
           examDate: '',
-          type: 'REGULAR'
+          type: 'REGULAR',
+          welcomeButtonTitle: '',
+          welcomeVideoUrl: ''
       });
       setPreviewUrl('');
       setSelectedFile(null);
+      setBannerDesktopPreview('');
+      setBannerMobilePreview('');
     }
     // Reset banner files on open/change
     setBannerDesktopFile(null);
@@ -100,6 +112,22 @@ export function CourseModal({ isOpen, onClose, onSave, initialData }: CourseModa
       // Cria URL temporária para preview
       const objectUrl = URL.createObjectURL(file);
       setPreviewUrl(objectUrl);
+    }
+  };
+
+  const handleBannerDesktopSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setBannerDesktopFile(file);
+      setBannerDesktopPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleBannerMobileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setBannerMobileFile(file);
+      setBannerMobilePreview(URL.createObjectURL(file));
     }
   };
 
@@ -307,6 +335,33 @@ export function CourseModal({ isOpen, onClose, onSave, initialData }: CourseModa
             />
           </div>
 
+          {/* VÍDEO DE BOAS-VINDAS */}
+          <div className="bg-[#1a1d24] p-4 rounded-lg border border-gray-800 space-y-4">
+            <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Vídeo de Boas-Vindas (Opcional)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Título do Botão</label>
+                <input 
+                  type="text" 
+                  value={formData.welcomeButtonTitle}
+                  onChange={e => setFormData({...formData, welcomeButtonTitle: e.target.value})}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-sm text-white focus:border-brand-red outline-none font-bold uppercase"
+                  placeholder="Ex: BOAS VINDAS"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">URL do Vídeo (YouTube/Panda)</label>
+                <input 
+                  type="text" 
+                  value={formData.welcomeVideoUrl}
+                  onChange={e => setFormData({...formData, welcomeVideoUrl: e.target.value})}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-sm text-white focus:border-brand-red outline-none"
+                  placeholder="Link do vídeo..."
+                />
+              </div>
+            </div>
+          </div>
+
           {/* --- UPLOAD DE CAPA --- */}
           <div>
             <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Capa do Curso <span className="text-red-500">*</span></label>
@@ -356,35 +411,63 @@ export function CourseModal({ isOpen, onClose, onSave, initialData }: CourseModa
           {/* NOVA SEÇÃO: BANNERS (Estilo Netflix) */}
           <div className="border-t border-gray-800 pt-4 mt-2">
             <h3 className="text-sm font-bold text-gray-400 uppercase mb-4">Personalização Visual (Banners)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Upload Banner Desktop */}
-                <div>
+                <div className="space-y-2">
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Banner Horizontal (PC/TV)</label>
+                    <div 
+                      onClick={() => document.getElementById('banner-desktop-input')?.click()}
+                      className="relative aspect-video rounded-lg border border-zinc-800 bg-black overflow-hidden cursor-pointer group hover:border-zinc-600 transition-all flex items-center justify-center"
+                    >
+                      {bannerDesktopPreview ? (
+                        <img src={bannerDesktopPreview} alt="Banner Desktop" className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" />
+                      ) : (
+                        <div className="text-center p-4">
+                          <ImageIcon className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
+                          <p className="text-[10px] text-zinc-600 font-bold uppercase">Clique para enviar</p>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="bg-black/80 text-white px-3 py-1 rounded text-[10px] font-bold uppercase">Trocar Banner</span>
+                      </div>
+                    </div>
                     <input 
+                        id="banner-desktop-input"
                         type="file" 
                         accept="image/*"
-                        onChange={(e) => setBannerDesktopFile(e.target.files?.[0] || null)}
-                        className="w-full bg-black border border-gray-800 rounded-lg p-2 text-white text-xs"
+                        onChange={handleBannerDesktopSelect}
+                        className="hidden"
                     />
-                    <p className="text-[10px] text-gray-600 mt-1">Proporção ideal: 1920x1080px (16:9)</p>
-                    {formData.bannerUrlDesktop && !bannerDesktopFile && (
-                         <p className="text-[10px] text-green-500 mt-1">Imagem atual já cadastrada.</p>
-                    )}
+                    <p className="text-[10px] text-gray-600">Proporção ideal: 1920x1080px (16:9)</p>
                 </div>
 
                 {/* Upload Banner Mobile */}
-                <div>
+                <div className="space-y-2">
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Banner Vertical (Celular)</label>
+                    <div 
+                      onClick={() => document.getElementById('banner-mobile-input')?.click()}
+                      className="relative aspect-[4/5] h-48 rounded-lg border border-zinc-800 bg-black overflow-hidden cursor-pointer group hover:border-zinc-600 transition-all flex items-center justify-center mx-auto"
+                    >
+                      {bannerMobilePreview ? (
+                        <img src={bannerMobilePreview} alt="Banner Mobile" className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" />
+                      ) : (
+                        <div className="text-center p-4">
+                          <ImageIcon className="w-8 h-8 text-zinc-700 mx-auto mb-2" />
+                          <p className="text-[10px] text-zinc-600 font-bold uppercase">Clique para enviar</p>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="bg-black/80 text-white px-3 py-1 rounded text-[10px] font-bold uppercase">Trocar Banner</span>
+                      </div>
+                    </div>
                     <input 
+                        id="banner-mobile-input"
                         type="file" 
                         accept="image/*"
-                        onChange={(e) => setBannerMobileFile(e.target.files?.[0] || null)}
-                        className="w-full bg-black border border-gray-800 rounded-lg p-2 text-white text-xs"
+                        onChange={handleBannerMobileSelect}
+                        className="hidden"
                     />
-                    <p className="text-[10px] text-gray-600 mt-1">Proporção ideal: 1080x1350px (4:5)</p>
-                     {formData.bannerUrlMobile && !bannerMobileFile && (
-                         <p className="text-[10px] text-green-500 mt-1">Imagem atual já cadastrada.</p>
-                    )}
+                    <p className="text-[10px] text-gray-600">Proporção ideal: 1080x1350px (4:5)</p>
                 </div>
             </div>
           </div>

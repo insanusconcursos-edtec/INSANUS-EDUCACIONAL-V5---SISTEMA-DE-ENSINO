@@ -27,6 +27,10 @@ export interface OnlineCourse {
   bannerUrlTablet?: string;
   bannerUrlMobile?: string;
 
+  // Vídeo de Boas-Vindas
+  welcomeButtonTitle?: string;
+  welcomeVideoUrl?: string;
+
   categoryId: string;
   subcategoryId?: string;
   organization?: string;
@@ -97,6 +101,10 @@ export interface CourseFormData {
   bannerUrlDesktop?: string;
   bannerUrlTablet?: string;
   bannerUrlMobile?: string;
+
+  // Vídeo de Boas-Vindas
+  welcomeButtonTitle?: string;
+  welcomeVideoUrl?: string;
 
   categoryId: string;
   subcategoryId: string;

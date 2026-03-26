@@ -8,9 +8,10 @@ import { LiveEvent } from '../../../types/liveEvent';
 import { StudentModuleCard } from './StudentModuleCard';
 import { CoursePlayer } from './player/CoursePlayer';
 import { useAuth } from '../../../contexts/AuthContext';
-import { CheckCircle2, LayoutList, ListTree, PlayCircle, ArrowLeft, Radio, Video, Clock, Play, Calendar } from 'lucide-react';
+import { CheckCircle2, LayoutList, ListTree, PlayCircle, ArrowLeft, Radio, Video, Clock, Play, Calendar, PlaySquare } from 'lucide-react';
 import { StudentCourseEdital } from './edital/StudentCourseEdital';
 import { CourseReviewDashboard } from './reviews/CourseReviewDashboard';
+import { WelcomeVideoModal } from './WelcomeVideoModal';
 
 interface CourseDetailsProps {
   course: OnlineCourse;
@@ -35,6 +36,7 @@ export function CourseDetails({ course, onBack }: CourseDetailsProps) {
   const [structure, setStructure] = useState<CourseStructureModule[]>([]);
   const [detailedProgress, setDetailedProgress] = useState<Record<string, { completedAt: string }>>({});
   const [progress, setProgress] = useState(0);
+  const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -199,6 +201,17 @@ export function CourseDetails({ course, onBack }: CourseDetailsProps) {
                        <PlayCircle size={20} fill="currentColor" />
                        {progress > 0 ? 'CONTINUAR ESTUDOS' : 'INICIAR CURSO'}
                    </button>
+
+                   {/* Botão de Boas-Vindas (Opcional) */}
+                   {course.welcomeVideoUrl && (
+                      <button 
+                        onClick={() => setIsWelcomeModalOpen(true)}
+                        className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white px-8 py-3 rounded-lg font-black text-sm uppercase transition-transform hover:scale-105 border border-zinc-700 shrink-0"
+                      >
+                          <PlaySquare size={20} className="text-red-500" />
+                          {course.welcomeButtonTitle || 'BOAS VINDAS'}
+                      </button>
+                   )}
 
                    <div className="flex items-center gap-4 flex-wrap w-full md:w-auto">
                       {/* Badge de Status */}
@@ -368,6 +381,16 @@ export function CourseDetails({ course, onBack }: CourseDetailsProps) {
               )}
           </div>
       </div>
+
+      {/* MODAL DE VÍDEO DE BOAS-VINDAS */}
+      {course.welcomeVideoUrl && (
+        <WelcomeVideoModal 
+          isOpen={isWelcomeModalOpen}
+          onClose={() => setIsWelcomeModalOpen(false)}
+          videoUrl={course.welcomeVideoUrl}
+          title={course.welcomeButtonTitle || 'BOAS VINDAS'}
+        />
+      )}
     </div>
   );
 }

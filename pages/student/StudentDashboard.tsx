@@ -82,6 +82,7 @@ const StudentDashboard: React.FC = () => {
             discipline: event.disciplineName || event.discipline || 'Geral',
             topic: event.topicName || event.subject || '',
             duration: event.duration,
+            multiplier: Number(event.multiplier || event.lawConfig?.multiplier || event.lawConfig?.speedFactor) || 1,
             recordedMinutes: event.recordedMinutes || 0, // NEW: Track actual time
             isCompleted: event.status === 'completed',
             observation: event.observation,

@@ -277,13 +277,20 @@ const StudentCalendar: React.FC = () => {
         }
 
         const data = await getRangeSchedule(currentUser.uid, start, end);
+        const activePlanId = config?.currentPlanId;
         
-        // Sort each day's items to prioritize Spaced Reviews
+        // Sort each day's items to prioritize Spaced Reviews AND filter by activePlanId
         const sortedData: Record<string, ScheduledEvent[]> = {};
         Object.keys(data).forEach(dateKey => {
             const rawItems = data[dateKey];
-            const spacedReviews = rawItems.filter(item => item.isSpacedReview || (item.type === 'review' && !!item.originalEventId));
-            const normalTasks = rawItems.filter(item => !(item.isSpacedReview || (item.type === 'review' && !!item.originalEventId)));
+            
+            // Filter by activePlanId to avoid overlapping tasks from different plans
+            const filteredItems = activePlanId 
+                ? rawItems.filter(item => item.planId === activePlanId)
+                : rawItems;
+
+            const spacedReviews = filteredItems.filter(item => item.isSpacedReview || (item.type === 'review' && !!item.originalEventId));
+            const normalTasks = filteredItems.filter(item => !(item.isSpacedReview || (item.type === 'review' && !!item.originalEventId)));
             sortedData[dateKey] = [...spacedReviews, ...normalTasks];
         });
 

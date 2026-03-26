@@ -21,7 +21,7 @@ const LawForm: React.FC<LawFormProps> = ({ isOpen, onClose, onSave, initialData,
   const [title, setTitle] = useState('');
   const [articles, setArticles] = useState('');
   const [pages, setPages] = useState<number | ''>('');
-  const [speedFactor, setSpeedFactor] = useState(1);
+  const [multiplier, setMultiplier] = useState(1);
   const [color, setColor] = useState('#eab308'); // Default Yellow
   
   // Resources
@@ -44,7 +44,7 @@ const LawForm: React.FC<LawFormProps> = ({ isOpen, onClose, onSave, initialData,
         setTitle(initialData.title);
         setArticles(initialData.lawConfig?.articles || '');
         setPages(initialData.lawConfig?.pages || '');
-        setSpeedFactor(initialData.lawConfig?.speedFactor || 1);
+        setMultiplier(initialData.lawConfig?.multiplier || initialData.lawConfig?.speedFactor || 1);
         setColor(initialData.color || '#eab308');
         
         setLinks(initialData.links || []);
@@ -66,7 +66,7 @@ const LawForm: React.FC<LawFormProps> = ({ isOpen, onClose, onSave, initialData,
         setTitle('');
         setArticles('');
         setPages('');
-        setSpeedFactor(1);
+        setMultiplier(1);
         setColor('#eab308');
         setLinks([]);
         setFiles([]);
@@ -91,7 +91,7 @@ const LawForm: React.FC<LawFormProps> = ({ isOpen, onClose, onSave, initialData,
         lawConfig: {
             articles,
             pages: Number(pages),
-            speedFactor: Number(speedFactor)
+            multiplier: Number(multiplier)
         },
         reviewConfig,
         files: processedFiles,
@@ -185,19 +185,19 @@ const LawForm: React.FC<LawFormProps> = ({ isOpen, onClose, onSave, initialData,
                 </div>
                 
                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-zinc-500 tracking-widest">Velocidade</label>
+                    <label className="text-[10px] font-black text-zinc-500 tracking-widest">Fator Multiplicativo</label>
                     <select 
-                        value={speedFactor}
-                        onChange={(e) => setSpeedFactor(Number(e.target.value))}
+                        value={multiplier}
+                        onChange={(e) => setMultiplier(Number(e.target.value))}
                         className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-xs text-white focus:outline-none"
                         onFocus={(e) => e.target.style.borderColor = color}
                         onBlur={(e) => e.target.style.borderColor = '#27272a'}
                     >
-                        <option value={1}>1x (Normal)</option>
-                        <option value={2}>2x (Rápido)</option>
-                        <option value={3}>3x (Muito Rápido)</option>
-                        <option value={4}>4x (Leitura Dinâmica)</option>
-                        <option value={5}>5x (Revisão Flash)</option>
+                        <option value={1}>1x</option>
+                        <option value={2}>2x</option>
+                        <option value={3}>3x</option>
+                        <option value={4}>4x</option>
+                        <option value={5}>5x</option>
                     </select>
                 </div>
             </div>
