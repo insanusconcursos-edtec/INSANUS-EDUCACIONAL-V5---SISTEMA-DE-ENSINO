@@ -20,7 +20,7 @@ export const sendWelcomeEmail = async (name: string, email: string, password: st
         <h2 style="color: #e53e3e;">Olá, ${name}!</h2>
         <p>Seu pagamento foi aprovado e seus acessos foram liberados com sucesso.</p>
         <p>Acesse a plataforma através do link abaixo:</p>
-        <p><strong>URL:</strong> <a href="https://suaplataforma.com" style="color: #60a5fa;">Acessar Plataforma</a></p>
+        <p><strong>URL:</strong> <a href="https://www.portal-insanus.com/login" style="color: #60a5fa;">Acessar Plataforma</a></p>
         <p><strong>E-mail:</strong> ${email}</p>
         <p><strong>Senha Provisória:</strong> ${password}</p>
         <hr style="border-color: #333; margin: 20px 0;" />
