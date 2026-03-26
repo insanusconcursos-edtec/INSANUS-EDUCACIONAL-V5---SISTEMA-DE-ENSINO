@@ -40,19 +40,19 @@ export function AdminCourseStudentsTab({ courseId }: AdminCourseStudentsTabProps
       const data = await response.json();
       
       if (data.success) {
-        const realStudents = data.students as CourseEnrollment[];
+        const realStudents = (data.students || []) as CourseEnrollment[];
         
         // Ordenação Alfabética Real (Defensiva)
-        realStudents.sort((a, b) => (a.userName || '').localeCompare(b.userName || ''));
+        realStudents.sort((a, b) => (a?.userName || '').localeCompare(b?.userName || ''));
         
         setEnrollments(realStudents);
         
         // Cálculo Dinâmico das Métricas
         setMetrics({
           total: realStudents.length,
-          regular: realStudents.filter(s => s.enrollmentType === 'REGULAR' || !s.enrollmentType).length,
-          migration: realStudents.filter(s => s.enrollmentType === 'MIGRACAO').length,
-          scholarship: realStudents.filter(s => s.enrollmentType === 'BOLSISTA').length
+          regular: realStudents.filter(s => s?.enrollmentType === 'REGULAR' || !s?.enrollmentType).length,
+          migration: realStudents.filter(s => s?.enrollmentType === 'MIGRACAO').length,
+          scholarship: realStudents.filter(s => s?.enrollmentType === 'BOLSISTA').length
         });
       }
     } catch (error) {
@@ -93,20 +93,28 @@ export function AdminCourseStudentsTab({ courseId }: AdminCourseStudentsTabProps
   };
 
   // Cálculo de dias restantes
-  const getRemainingDays = (expiresAt: string) => {
+  const getRemainingDays = (expiresAt?: string) => {
+    if (!expiresAt) return { label: 'Sem validade', color: 'text-zinc-500' };
     const now = new Date();
-    const expiration = parseISO(expiresAt);
-    const days = differenceInDays(expiration, now);
-    
-    if (days < 0) return { label: 'Expirado', color: 'text-red-500' };
-    if (days === 0) return { label: 'Expira hoje', color: 'text-orange-500' };
-    return { label: `${days} dias restantes`, color: 'text-emerald-400' };
+    try {
+      const expiration = parseISO(expiresAt);
+      const days = differenceInDays(expiration, now);
+      
+      if (days < 0) return { label: 'Expirado', color: 'text-red-500' };
+      if (days === 0) return { label: 'Expira hoje', color: 'text-orange-500' };
+      return { label: `${days} dias restantes`, color: 'text-emerald-400' };
+    } catch (e) {
+      return { label: 'Data inválida', color: 'text-zinc-500' };
+    }
   };
 
-  const filteredEnrollments = enrollments.filter(e => {
-    const matchesSearch = e.userName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         e.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (e.userCpf && e.userCpf.includes(searchTerm));
+  const filteredEnrollments = (enrollments || []).filter(e => {
+    const searchLower = (searchTerm || '').toLowerCase();
+    const matchName = (e?.userName || '').toLowerCase().includes(searchLower);
+    const matchEmail = (e?.userEmail || '').toLowerCase().includes(searchLower);
+    const matchCpf = (e?.userCpf || '').includes(searchTerm);
+    
+    const matchesSearch = matchName || matchEmail || matchCpf;
     const matchesFilter = filterType === 'ALL' || e.enrollmentType === filterType;
     return matchesSearch && matchesFilter;
   });
@@ -265,14 +273,14 @@ export function AdminCourseStudentsTab({ courseId }: AdminCourseStudentsTabProps
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
-              {filteredEnrollments.length === 0 ? (
+              {(filteredEnrollments || []).length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-20 text-center text-zinc-500 italic">
                     Nenhum aluno encontrado com os filtros aplicados.
                   </td>
                 </tr>
               ) : (
-                filteredEnrollments.map((enrollment) => {
+                (filteredEnrollments || []).map((enrollment) => {
                   const remaining = getRemainingDays(enrollment.expiresAt);
                   const waLink = getWhatsAppLink(enrollment.userPhone);
 
@@ -285,7 +293,16 @@ export function AdminCourseStudentsTab({ courseId }: AdminCourseStudentsTabProps
                               <img src={enrollment.userAvatar} alt={enrollment.userName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             ) : (
                               <span className="text-zinc-400 font-bold text-sm">
-                                {enrollment.userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                {(() => {
+                                  const userNameString = enrollment?.userName || 'Aluno';
+                                  return userNameString
+                                    .split(' ')
+                                    .filter(Boolean)
+                                    .map(n => n[0])
+                                    .join('')
+                                    .slice(0, 2)
+                                    .toUpperCase() || '👤';
+                                })()}
                               </span>
                             )}
                           </div>
@@ -322,7 +339,11 @@ export function AdminCourseStudentsTab({ courseId }: AdminCourseStudentsTabProps
                       </td>
                       <td className="px-6 py-4">
                         <div className="space-y-1">
-                          <p className="text-zinc-400 text-[10px] uppercase font-bold">Expira em: <span className="text-white">{format(parseISO(enrollment.expiresAt), 'dd/MM/yyyy')}</span></p>
+                          <p className="text-zinc-400 text-[10px] uppercase font-bold">
+                            Expira em: <span className="text-white">
+                              {enrollment.expiresAt ? format(parseISO(enrollment.expiresAt), 'dd/MM/yyyy') : '---'}
+                            </span>
+                          </p>
                           <p className={`text-xs font-bold ${remaining.color}`}>{remaining.label}</p>
                         </div>
                       </td>
