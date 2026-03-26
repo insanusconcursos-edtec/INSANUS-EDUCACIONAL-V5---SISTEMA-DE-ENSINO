@@ -24,7 +24,8 @@ import {
   setDoc, 
   updateDoc, 
   arrayUnion, 
-  serverTimestamp 
+  serverTimestamp,
+  Timestamp 
 } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import toast from 'react-hot-toast';
@@ -105,6 +106,13 @@ export default function MigrationEnrollment() {
       const user = userCredential.user;
 
       // 2. Criar documento do usuário no Firestore
+      const startDate = new Date();
+      const endDate = new Date();
+      const duration = linkData.accessDurationDays || 365;
+      endDate.setDate(startDate.getDate() + duration);
+      
+      const enrollmentId = `mig_${crypto.randomUUID()}`;
+
       const userDoc = {
         uid: user.uid,
         name: formData.name,
@@ -115,15 +123,35 @@ export default function MigrationEnrollment() {
         createdAt: serverTimestamp(),
         access: [
           {
+            id: enrollmentId,
             type: 'course',
             targetId: linkData.courseId,
             isActive: true,
-            enrollmentType: 'MIGRACAO'
+            enrollmentType: 'MIGRACAO',
+            startDate: Timestamp.fromDate(startDate),
+            endDate: Timestamp.fromDate(endDate)
           }
         ]
       };
 
       await setDoc(doc(db, 'users', user.uid), userDoc);
+      
+      // 3. Criar registro na coleção course_enrollments (para o Admin)
+      const directEnrollmentId = `${linkData.courseId}_${user.uid}`;
+      await setDoc(doc(db, 'course_enrollments', directEnrollmentId), {
+        id: directEnrollmentId,
+        courseId: linkData.courseId,
+        userId: user.uid,
+        userName: formData.name,
+        userEmail: formData.email,
+        userCpf: formData.cpf,
+        userPhone: formData.phone,
+        enrollmentType: 'MIGRACAO',
+        releasedAt: startDate.toISOString(),
+        expiresAt: endDate.toISOString(),
+        active: true,
+        createdAt: serverTimestamp()
+      });
       
       // Deslogar para garantir que a nova aba peça login
       await signOut(auth);
@@ -153,14 +181,45 @@ export default function MigrationEnrollment() {
       const user = userCredential.user;
 
       // 2. Atualizar documento do usuário com o novo curso
+      const startDate = new Date();
+      const endDate = new Date();
+      const duration = linkData.accessDurationDays || 365;
+      endDate.setDate(startDate.getDate() + duration);
+      
+      const enrollmentId = `mig_${crypto.randomUUID()}`;
+
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
         access: arrayUnion({
+          id: enrollmentId,
           type: 'course',
           targetId: linkData.courseId,
           isActive: true,
-          enrollmentType: 'MIGRACAO'
+          enrollmentType: 'MIGRACAO',
+          startDate: Timestamp.fromDate(startDate),
+          endDate: Timestamp.fromDate(endDate)
         })
+      });
+
+      // 3. Criar/Atualizar registro na coleção course_enrollments (para o Admin)
+      // Buscamos o perfil do usuário para ter os dados completos
+      const userSnap = await getDoc(userRef);
+      const userData = userSnap.data();
+
+      const directEnrollmentId = `${linkData.courseId}_${user.uid}`;
+      await setDoc(doc(db, 'course_enrollments', directEnrollmentId), {
+        id: directEnrollmentId,
+        courseId: linkData.courseId,
+        userId: user.uid,
+        userName: userData?.name || formData.email,
+        userEmail: userData?.email || formData.email,
+        userCpf: userData?.cpf || '',
+        userPhone: userData?.phone || userData?.whatsapp || '',
+        enrollmentType: 'MIGRACAO',
+        releasedAt: startDate.toISOString(),
+        expiresAt: endDate.toISOString(),
+        active: true,
+        createdAt: serverTimestamp()
       });
 
       // Deslogar para garantir que a nova aba peça login
