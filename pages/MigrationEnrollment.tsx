@@ -11,7 +11,9 @@ import {
   User, 
   CreditCard, 
   Phone,
-  ArrowRight
+  ArrowRight,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { 
   createUserWithEmailAndPassword, 
@@ -39,6 +41,8 @@ export default function MigrationEnrollment() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<'register' | 'login'>('register');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -403,25 +407,46 @@ export default function MigrationEnrollment() {
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
                 <input 
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   placeholder="Senha"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-600 transition-all"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-12 text-white focus:outline-none focus:border-red-600 transition-all"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+                <div className="mt-1">
+                  {formData.password && formData.password.length < 6 ? (
+                    <p className="text-red-500 text-[10px] font-bold uppercase tracking-widest">A senha deve conter no mínimo 6 dígitos.</p>
+                  ) : (
+                    <p className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest">Mínimo de 6 caracteres.</p>
+                  )}
+                </div>
               </div>
 
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
                 <input 
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   required
                   placeholder="Confirme a Senha"
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-600 transition-all"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-12 text-white focus:outline-none focus:border-red-600 transition-all"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
           ) : (
@@ -440,13 +465,20 @@ export default function MigrationEnrollment() {
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
                 <input 
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   placeholder="Sua Senha"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-red-600 transition-all"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-4 pl-12 pr-12 text-white focus:outline-none focus:border-red-600 transition-all"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
           )}
