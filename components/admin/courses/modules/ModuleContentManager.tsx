@@ -254,20 +254,6 @@ export function ModuleContentManager({ module, onBack }: ModuleContentManagerPro
     }
   };
 
-  const handleReorderFolder = async (index: number, direction: 'up' | 'down') => {
-    const newSubModules = [...subModules];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newSubModules.length) return;
-    [newSubModules[index], newSubModules[targetIndex]] = [newSubModules[targetIndex], newSubModules[index]];
-    setSubModules(newSubModules);
-    try {
-        await courseService.reorderSubModules(newSubModules);
-    } catch (error) {
-        console.error("Erro ao reordenar pastas", error);
-        loadContent();
-    }
-  };
-
   const handleDeleteFolder = async () => {
     if (itemToDelete && itemToDelete.type === 'folder') {
       await courseService.deleteSubModule(itemToDelete.id);
@@ -376,6 +362,42 @@ export function ModuleContentManager({ module, onBack }: ModuleContentManagerPro
     }
   };
 
+  // --- NOVA FUNÇÃO: Reordenar Conteúdo Misto (Pastas + Aulas Raiz) ---
+  const handleReorderMixed = async (index: number, direction: 'up' | 'down') => {
+    const mixedContent = [
+      ...subModules.map(f => ({ type: 'folder' as const, id: f.id, order: f.order })),
+      ...lessons.filter(l => !l.subModuleId).map(l => ({ type: 'lesson' as const, id: l.id, order: l.order }))
+    ].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= mixedContent.length) return;
+
+    // Swap
+    [mixedContent[index], mixedContent[targetIndex]] = [mixedContent[targetIndex], mixedContent[index]];
+
+    // Recalculate orders
+    const updates = mixedContent.map((item, idx) => ({ ...item, order: idx + 1 }));
+
+    // Update local state
+    setSubModules(prev => prev.map(s => {
+      const update = updates.find(u => u.type === 'folder' && u.id === s.id);
+      return update ? { ...s, order: update.order } : s;
+    }).sort((a, b) => a.order - b.order));
+
+    setLessons(prev => prev.map(l => {
+      const update = updates.find(u => u.type === 'lesson' && u.id === l.id);
+      return update ? { ...l, order: update.order } : l;
+    }).sort((a, b) => a.order - b.order));
+
+    // Save to DB
+    try {
+      await courseService.reorderMixedContent(updates);
+    } catch (error) {
+      console.error("Erro ao reordenar conteúdo misto", error);
+      loadContent();
+    }
+  };
+
   const handleMoveLessonConfirm = async (targetFolderId: string | null) => {
     if (lessonToMove) {
         await courseService.moveLesson(lessonToMove.id, targetFolderId);
@@ -387,10 +409,6 @@ export function ModuleContentManager({ module, onBack }: ModuleContentManagerPro
   // Filtrar aulas por pasta
   const getLessonsInFolder = (folderId: string) => lessons
     .filter(l => l.subModuleId === folderId)
-    .sort((a, b) => (a.order || 0) - (b.order || 0));
-    
-  const getRootLessons = () => lessons
-    .filter(l => !l.subModuleId)
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   // Renderização do LessonContentManager
@@ -524,9 +542,17 @@ export function ModuleContentManager({ module, onBack }: ModuleContentManagerPro
             <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-red-600"></div></div>
         ) : (
             <>
-                {/* 1. Listar Pastas (AGORA COM ORDENAÇÃO) */}
-                {subModules.map((folder, index) => (
-                    <SubModuleItem 
+                {/* Lista Unificada de Pastas e Aulas Raiz */}
+                {[
+                  ...subModules.map(folder => ({ type: 'folder' as const, id: folder.id, data: folder, order: folder.order })),
+                  ...lessons.filter(l => !l.subModuleId).map(lesson => ({ type: 'lesson' as const, id: lesson.id, data: lesson, order: lesson.order }))
+                ]
+                .sort((a, b) => (a.order || 0) - (b.order || 0))
+                .map((item, index, array) => {
+                  if (item.type === 'folder') {
+                    const folder = item.data;
+                    return (
+                      <SubModuleItem 
                         key={folder.id}
                         subModule={folder}
                         lessons={getLessonsInFolder(folder.id)}
@@ -538,48 +564,40 @@ export function ModuleContentManager({ module, onBack }: ModuleContentManagerPro
                         onMoveLesson={setLessonToMove}
                         onManageLesson={setManagingLesson} 
                         
-                        onMoveUp={() => handleReorderFolder(index, 'up')}
-                        onMoveDown={() => handleReorderFolder(index, 'down')}
-                        // NOVA PROP: Ordenação de Aula na Pasta
+                        onMoveUp={() => handleReorderMixed(index, 'up')}
+                        onMoveDown={() => handleReorderMixed(index, 'down')}
                         onReorderLesson={(idx, dir) => handleReorderLesson(idx, dir, folder.id)}
                         isFirst={index === 0}
-                        isLast={index === subModules.length - 1}
+                        isLast={index === array.length - 1}
 
-                        // Props de Controle de Expansão
                         isOpen={!!expandedFolders[folder.id]}
                         onToggle={() => toggleFolder(folder.id)}
 
-                        // Props de Seleção
                         selectedLessonIds={selectedLessonIds}
                         onToggleLessonSelection={toggleLessonSelection}
-                    />
-                ))}
+                      />
+                    );
+                  } else {
+                    const lesson = item.data;
+                    return (
+                      <LessonItem 
+                        key={lesson.id}
+                        lesson={lesson}
+                        onEdit={() => { setEditingLesson(lesson); setIsLessonModalOpen(true); }}
+                        onDelete={() => setItemToDelete({ type: 'lesson', id: lesson.id, title: lesson.title })}
+                        onMove={() => setLessonToMove(lesson)}
+                        onManageContent={() => setManagingLesson(lesson)} 
+                        onReorderUp={() => handleReorderMixed(index, 'up')}
+                        onReorderDown={() => handleReorderMixed(index, 'down')}
+                        isFirst={index === 0}
+                        isLast={index === array.length - 1}
 
-                {/* 2. Listar Aulas Soltas (Raiz) */}
-                {getRootLessons().length > 0 && (
-                    <div className="space-y-2 pt-2">
-                        {subModules.length > 0 && <div className="h-px bg-gray-800 my-4" />}
-                        {getRootLessons().map((lesson, index) => (
-                            <LessonItem 
-                                key={lesson.id}
-                                lesson={lesson}
-                                onEdit={() => { setEditingLesson(lesson); setIsLessonModalOpen(true); }}
-                                onDelete={() => setItemToDelete({ type: 'lesson', id: lesson.id, title: lesson.title })}
-                                onMove={() => setLessonToMove(lesson)}
-                                onManageContent={() => setManagingLesson(lesson)} 
-                                // NOVA PROP: Ordenação de Aula na Raiz (null)
-                                onReorderUp={() => handleReorderLesson(index, 'up', null)}
-                                onReorderDown={() => handleReorderLesson(index, 'down', null)}
-                                isFirst={index === 0}
-                                isLast={index === getRootLessons().length - 1}
-
-                                // Props de Seleção
-                                isSelected={selectedLessonIds.includes(lesson.id)}
-                                onToggleSelection={toggleLessonSelection}
-                            />
-                        ))}
-                    </div>
-                )}
+                        isSelected={selectedLessonIds.includes(lesson.id)}
+                        onToggleSelection={toggleLessonSelection}
+                      />
+                    );
+                  }
+                })}
 
                 {lessons.length === 0 && subModules.length === 0 && (
                     <div className="text-center py-20 border border-dashed border-gray-800 rounded-xl">

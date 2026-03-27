@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
-import { X, Save, Loader2, Upload, Search, Folder, ChevronLeft, PlayCircle } from 'lucide-react';
+import { X, Save, Loader2, Upload, Search, Folder, ChevronLeft, PlayCircle, FileText, FileQuestion, Layers } from 'lucide-react';
 import { CourseContent, ContentType } from '../../../../../types/course';
 import { courseService } from '../../../../../services/courseService';
 import { RichTextEditor } from '../../../../ui/RichTextEditor';
@@ -32,6 +32,7 @@ export function ContentModal({ isOpen, onClose, onSave, initialData, lessonId }:
   
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [existingPdfUrl, setExistingPdfUrl] = useState('');
+  const [pdfClassification, setPdfClassification] = useState<'TEORIA' | 'QUESTÕES' | 'TEORIA_QUESTÕES'>('TEORIA');
   const [selectingVideo, setSelectingVideo] = useState(false);
   
   // Panda Media Picker
@@ -162,6 +163,7 @@ export function ContentModal({ isOpen, onClose, onSave, initialData, lessonId }:
         setEmbedCode(initialData.embedCode || '');
         setTextContent(initialData.textContent || '');
         setExistingPdfUrl(initialData.fileUrl || '');
+        setPdfClassification(initialData.pdfClassification || 'TEORIA');
       } else {
         // Reset
         setType('video');
@@ -174,6 +176,7 @@ export function ContentModal({ isOpen, onClose, onSave, initialData, lessonId }:
         setTextContent('');
         setExistingPdfUrl('');
         setPdfFile(null);
+        setPdfClassification('TEORIA');
       }
     }
   }, [isOpen, initialData]);
@@ -219,6 +222,7 @@ export function ContentModal({ isOpen, onClose, onSave, initialData, lessonId }:
             finalPdfUrl = await courseService.uploadPDF(pdfFile);
         }
         data.fileUrl = finalPdfUrl;
+        data.pdfClassification = pdfClassification;
       }
 
       await onSave(data);
@@ -358,6 +362,70 @@ export function ContentModal({ isOpen, onClose, onSave, initialData, lessonId }:
                         <span className="text-gray-500 text-xs">Nenhum arquivo selecionado</span>
                     )}
                 </div>
+
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Classificação do PDF:</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {[
+                            { id: 'TEORIA', label: 'TEORIA', icon: FileText },
+                            { id: 'QUESTÕES', label: 'QUESTÕES', icon: FileQuestion },
+                            { id: 'TEORIA_QUESTÕES', label: 'AMBOS', icon: Layers }
+                        ].map((option) => (
+                            <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => setPdfClassification(option.id as any)}
+                                className={`flex flex-col items-center gap-2 py-3 px-1 rounded text-[9px] font-bold uppercase transition-all border ${pdfClassification === option.id ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-600/20' : 'bg-black border-gray-800 text-gray-400 hover:border-gray-600'}`}
+                            >
+                                <option.icon size={18} />
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Preview da Identificação Visual */}
+                <div className="p-4 bg-black/40 rounded-lg border border-gray-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Preview na Lista</span>
+                        <div className="h-px flex-1 bg-gray-800 mx-4"></div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 p-3 bg-[#1a1d24] border border-gray-700 rounded shadow-inner">
+                        <div className="w-8 h-8 rounded bg-gray-900 flex items-center justify-center border border-gray-700">
+                            <FileText size={16} className="text-yellow-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <h4 className="text-sm font-bold text-gray-200 truncate">{title || 'Título do Material'}</h4>
+                                {(() => {
+                                    let icon = <FileText size={10} />;
+                                    let label = 'TEORIA';
+                                    let colorClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+
+                                    if (pdfClassification === 'QUESTÕES') {
+                                        icon = <FileQuestion size={10} />;
+                                        label = 'QUESTÕES';
+                                        colorClass = 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+                                    } else if (pdfClassification === 'TEORIA_QUESTÕES') {
+                                        icon = <Layers size={10} />;
+                                        label = 'TEORIA + QUESTÕES';
+                                        colorClass = 'bg-orange-500/10 text-orange-400 border-orange-500/20';
+                                    }
+
+                                    return (
+                                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-[9px] font-black uppercase tracking-tighter ${colorClass}`}>
+                                            {icon}
+                                            {label}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider">pdf</span>
+                        </div>
+                    </div>
+                </div>
+
                 <p className="text-[10px] text-gray-500 text-center">
                     * O arquivo receberá marca d&apos;água com CPF/Email do aluno automaticamente ao ser baixado.
                 </p>

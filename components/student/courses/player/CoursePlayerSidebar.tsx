@@ -21,7 +21,6 @@ export function CoursePlayerSidebar({
 }: CoursePlayerSidebarProps) {
   // Helper para filtrar aulas
   const getLessonsInFolder = (folderId: string) => structure.lessons.filter(l => l.subModuleId === folderId);
-  const getRootLessons = () => structure.lessons.filter(l => !l.subModuleId);
 
   // --- CÁLCULO MÓDULO (Local) ---
   const moduleTotal = structure.lessons.length;
@@ -59,33 +58,38 @@ export function CoursePlayerSidebar({
       {/* Lista Scrollável */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
         
-        {/* 1. Pastas (Acordeão) */}
-        {structure.subModules.map(folder => (
-            <FolderItem 
+        {/* Lista Unificada de Pastas e Aulas Raiz */}
+        {[
+          ...structure.subModules.map(folder => ({ type: 'folder' as const, id: folder.id, data: folder, order: folder.order })),
+          ...structure.lessons.filter(l => !l.subModuleId).map(lesson => ({ type: 'lesson' as const, id: lesson.id, data: lesson, order: lesson.order }))
+        ]
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+        .map(item => {
+          if (item.type === 'folder') {
+            const folder = item.data;
+            return (
+              <FolderItem 
                 key={folder.id} 
                 folder={folder} 
                 lessons={getLessonsInFolder(folder.id)}
                 activeLessonId={activeLessonId}
                 onSelectLesson={onSelectLesson}
                 completedLessons={completedLessons}
-            />
-        ))}
-
-        {/* 2. Aulas Soltas (Raiz) */}
-        {getRootLessons().length > 0 && (
-            <div className="pt-2">
-                {structure.subModules.length > 0 && <div className="h-px bg-gray-800 mb-2 mx-2"></div>}
-                {getRootLessons().map(lesson => (
-                    <LessonRow 
-                        key={lesson.id} 
-                        lesson={lesson} 
-                        isActive={lesson.id === activeLessonId} 
-                        isCompleted={completedLessons.includes(lesson.id)}
-                        onClick={() => onSelectLesson(lesson)} 
-                    />
-                ))}
-            </div>
-        )}
+              />
+            );
+          } else {
+            const lesson = item.data;
+            return (
+              <LessonRow 
+                key={lesson.id} 
+                lesson={lesson} 
+                isActive={lesson.id === activeLessonId} 
+                isCompleted={completedLessons.includes(lesson.id)}
+                onClick={() => onSelectLesson(lesson)} 
+              />
+            );
+          }
+        })}
       </div>
     </div>
   );

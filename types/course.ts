@@ -133,6 +133,7 @@ export interface CourseContent {
   useAlternativePlayer?: boolean; // Para YouTube
   
   fileUrl?: string; // Para PDF
+  pdfClassification?: 'TEORIA' | 'QUESTÕES' | 'TEORIA_QUESTÕES';
   
   linkUrl?: string; // Para Links
   

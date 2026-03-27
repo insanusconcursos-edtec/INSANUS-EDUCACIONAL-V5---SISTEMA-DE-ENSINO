@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { FileText, FileQuestion, Layers, Download } from 'lucide-react';
 import { CourseLesson, CourseContent } from '../../../../types/course';
 import { courseService } from '../../../../services/courseService';
 import { useAuth } from '../../../../contexts/AuthContext';
@@ -50,6 +51,19 @@ export function CoursePlayerContent({ lesson }: CoursePlayerContentProps) {
         alert(`Erro ao gerar documento seguro: ${error.message}`);
     } finally {
         setOpeningPdfId(null);
+    }
+  };
+
+  // Helper para renderizar o ícone do PDF baseado na classificação
+  const renderPdfIcon = (classification?: string) => {
+    switch (classification) {
+      case 'QUESTÕES':
+        return <FileQuestion size={24} />;
+      case 'TEORIA_QUESTÕES':
+        return <Layers size={24} />;
+      case 'TEORIA':
+      default:
+        return <FileText size={24} />;
     }
   };
 
@@ -122,17 +136,17 @@ export function CoursePlayerContent({ lesson }: CoursePlayerContentProps) {
                                 {openingPdfId === item.id ? (
                                     <div className="animate-spin h-5 w-5 border-2 border-red-500 border-t-transparent rounded-full"></div>
                                 ) : (
-                                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" /></svg>
+                                    renderPdfIcon(item.pdfClassification)
                                 )}
                             </div>
                             <div className="flex-1">
                                 <h4 className="text-white font-bold text-sm">{item.title}</h4>
                                 <span className={`text-[10px] uppercase transition-colors ${openingPdfId === item.id ? 'text-red-400 animate-pulse' : 'text-gray-500 group-hover:text-gray-400'}`}>
-                                    {openingPdfId === item.id ? 'Gerando documento seguro...' : 'Material em PDF • Clique para acessar'}
+                                    {openingPdfId === item.id ? 'Gerando documento seguro...' : `Material em PDF • ${item.pdfClassification || 'TEORIA'} • Clique para acessar`}
                                 </span>
                             </div>
                             {openingPdfId !== item.id && (
-                                <svg className="w-5 h-5 text-gray-500 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                <Download className="w-5 h-5 text-gray-500 group-hover:text-white" />
                             )}
                         </div>
                     )}

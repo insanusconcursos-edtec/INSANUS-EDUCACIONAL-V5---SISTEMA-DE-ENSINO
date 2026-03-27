@@ -510,6 +510,21 @@ export const courseService = {
     }
   },
 
+  reorderMixedContent: async (items: { type: 'folder' | 'lesson', id: string }[]) => {
+    try {
+      const batch = writeBatch(db);
+      items.forEach((item, index) => {
+        const collectionName = item.type === 'folder' ? SUBMODULES_COLLECTION : LESSONS_COLLECTION;
+        const docRef = doc(db, collectionName, item.id);
+        batch.update(docRef, { order: index + 1 });
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("Erro ao reordenar conteúdo misto:", error);
+      throw error;
+    }
+  },
+
   // --- CONTEÚDOS ---
 
   createContent: async (data: Omit<CourseContent, 'id'>) => {
