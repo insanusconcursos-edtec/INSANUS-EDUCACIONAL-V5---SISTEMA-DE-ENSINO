@@ -100,6 +100,66 @@ const ActionAccordion: React.FC<{ type: 'WEAK' | 'REVIEW' | 'STRONG'; count: num
     );
 };
 
+// --- SUBCOMPONENTE 3: PAINEL DE INSTRUÇÕES (STICKY) ---
+const InstructionPanel: React.FC<{ hasPenalty: boolean }> = ({ hasPenalty }) => (
+    <div className="w-full lg:w-1/3 sticky top-24 bg-[#1A1A1A] border border-gray-800 rounded-lg p-5 shadow-2xl">
+        <h3 className="text-white font-bold text-lg mb-4 uppercase tracking-wider border-b border-gray-800 pb-2">Entenda os Motivos</h3>
+        
+        <div className="space-y-6">
+            {/* Motivos de Acerto */}
+            <div>
+                <h4 className="text-green-500 font-bold text-[10px] uppercase mb-3 tracking-widest bg-green-500/10 px-2 py-1 rounded w-fit">Motivos de Acerto</h4>
+                <div className="space-y-4">
+                    <div>
+                        <p className="text-green-400 text-[10px] font-black uppercase mb-1">DOMÍNIO DO CONTEÚDO</p>
+                        <p className="text-gray-400 text-xs leading-relaxed">Marque essa opção se você acertou a questão porque de fato tem conhecimento do assunto e sabia com certeza a resposta.</p>
+                    </div>
+                    <div>
+                        <p className="text-green-400 text-[10px] font-black uppercase mb-1">CHUTE CONSCIENTE</p>
+                        <p className="text-gray-400 text-xs leading-relaxed">Marque essa opção se você acertou a questão, porém, ficou na dúvida (indeciso) entre uma e outra alternativa.</p>
+                    </div>
+                    <div>
+                        <p className="text-green-400 text-[10px] font-black uppercase mb-1">CHUTE NA SORTE</p>
+                        <p className="text-gray-400 text-xs leading-relaxed">Marque essa opção se você não fazia ideia do assunto, chutou, contou com a sorte e acertou.</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Motivos de Erro */}
+            <div>
+                <h4 className="text-red-500 font-bold text-[10px] uppercase mb-3 tracking-widest bg-red-500/10 px-2 py-1 rounded w-fit">Motivos de Erro</h4>
+                <div className="space-y-4">
+                    <div>
+                        <p className="text-red-400 text-[10px] font-black uppercase mb-1">FALTA DE CONTEÚDO</p>
+                        <p className="text-gray-400 text-xs leading-relaxed">Marque essa opção se você errou a questão porque não conhecia o assunto tratado, ou seja, não fazia ideia do que se tratava a questão.</p>
+                    </div>
+                    <div>
+                        <p className="text-red-400 text-[10px] font-black uppercase mb-1">FALTA DE ATENÇÃO</p>
+                        <p className="text-gray-400 text-xs leading-relaxed">Marque essa opção se você até possuía conhecimento do assunto, pois já estudou, porém, por algum singelo detalhe que passou despercebido, acabou errando a questão.</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Motivo de Questão em Branco (Condicional) */}
+            {hasPenalty && (
+                <div>
+                    <h4 className="text-yellow-500 font-bold text-[10px] uppercase mb-3 tracking-widest bg-yellow-500/10 px-2 py-1 rounded w-fit">Motivo de Questão em Branco</h4>
+                    <div className="space-y-4">
+                        <div>
+                            <p className="text-yellow-400 text-[10px] font-black uppercase mb-1">FALTA DE CONTEÚDO</p>
+                            <p className="text-gray-400 text-xs leading-relaxed">Marque se tratava de um assunto do qual ainda não estudou e não possui domínio, e, para não ser penalizado ao errar, optou por deixar em branco.</p>
+                        </div>
+                        <div>
+                            <p className="text-yellow-400 text-[10px] font-black uppercase mb-1">INSEGURANÇA</p>
+                            <p className="text-gray-400 text-xs leading-relaxed">Marque se você até tem conhecimento do assunto, já estudou, porém, ficou inseguro (na dúvida) de responder e ser penalizado ao errar.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    </div>
+);
+
 // --- COMPONENTE PRINCIPAL (MODO ABA) ---
 export const StudentAutoDiagnosis: React.FC<{ exam: SimulatedExam, attempt: SimulatedAttempt }> = ({ exam, attempt }) => {
     const [step, setStep] = useState<'FORM' | 'REPORT'>('FORM');
@@ -229,61 +289,67 @@ export const StudentAutoDiagnosis: React.FC<{ exam: SimulatedExam, attempt: Simu
 
             {/* CONTEÚDO: FORMULÁRIO */}
             {step === 'FORM' && (
-                <div className="space-y-6">
-                    <div className="bg-[#121418] rounded-2xl border border-gray-800 p-1">
-                        <div className="p-4 bg-[#1a1d24] border-b border-gray-800 rounded-t-xl flex justify-between items-center">
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Preenchimento</span>
-                            <span className="text-xl font-black text-white">
-                                {Math.round((Object.keys(answersMap).length / exam.questionCount) * 100)}%
-                            </span>
-                        </div>
-                        <div className="max-h-[600px] overflow-y-auto p-6 space-y-3 scrollbar-thin scrollbar-thumb-gray-700">
-                            {Array.from({ length: exam.questionCount }).map((_, idx) => {
-                                const qNum = idx + 1;
-                                const status = (() => {
-                                    const userAns = attempt.userAnswers[qNum] || attempt.userAnswers[String(qNum)];
-                                    const questionData = exam.questions?.find(q => q.index === qNum);
-                                    const correctAns = questionData?.answer;
-                                    
-                                    if (!userAns) return 'BLANK';
-                                    return userAns === correctAns ? 'CORRECT' : 'WRONG';
-                                })();
-                                const currentReason = answersMap[qNum];
-                                const { subject, topic } = getQuestionMeta(qNum);
-                                let theme = { color: 'gray', label: 'BRANCO', options: REASONS.BLANK };
-                                if (status === 'CORRECT') theme = { color: 'green', label: 'ACERTO', options: REASONS.CORRECT };
-                                else if (status === 'WRONG') theme = { color: 'red', label: 'ERRO', options: REASONS.WRONG };
+                <div className="flex flex-col lg:flex-row gap-6 items-start">
+                    {/* Coluna Esquerda: Questões (Flex-1) */}
+                    <div className="flex-1 w-full flex flex-col gap-4">
+                        <div className="bg-[#121418] rounded-2xl border border-gray-800 p-1">
+                            <div className="p-4 bg-[#1a1d24] border-b border-gray-800 rounded-t-xl flex justify-between items-center">
+                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Preenchimento</span>
+                                <span className="text-xl font-black text-white">
+                                    {Math.round((Object.keys(answersMap).length / exam.questionCount) * 100)}%
+                                </span>
+                            </div>
+                            <div className="max-h-[600px] overflow-y-auto p-6 space-y-3 scrollbar-thin scrollbar-thumb-gray-700">
+                                {Array.from({ length: exam.questionCount }).map((_, idx) => {
+                                    const qNum = idx + 1;
+                                    const status = (() => {
+                                        const userAns = attempt.userAnswers[qNum] || attempt.userAnswers[String(qNum)];
+                                        const questionData = exam.questions?.find(q => q.index === qNum);
+                                        const correctAns = questionData?.answer;
+                                        
+                                        if (!userAns) return 'BLANK';
+                                        return userAns === correctAns ? 'CORRECT' : 'WRONG';
+                                    })();
+                                    const currentReason = answersMap[qNum];
+                                    const { subject, topic } = getQuestionMeta(qNum);
+                                    let theme = { color: 'gray', label: 'BRANCO', options: REASONS.BLANK };
+                                    if (status === 'CORRECT') theme = { color: 'green', label: 'ACERTO', options: REASONS.CORRECT };
+                                    else if (status === 'WRONG') theme = { color: 'red', label: 'ERRO', options: REASONS.WRONG };
 
-                                return (
-                                    <div key={qNum} className={`flex flex-col md:flex-row gap-4 p-4 rounded-xl border border-${theme.color}-900/30 bg-${theme.color}-900/5 ${currentReason ? 'opacity-60' : 'opacity-100'} transition-opacity hover:opacity-100`}>
-                                        <div className="flex flex-col items-center justify-center min-w-[140px] text-center border-r border-gray-800 pr-4">
-                                            <span className="text-xs font-bold text-gray-500 mb-1">QUESTÃO {qNum}</span>
-                                            <span className="text-[10px] text-yellow-500/80 font-bold uppercase mb-0.5 max-w-[130px] truncate">{subject}</span>
-                                            <span className="text-[9px] text-gray-400 font-medium mb-2 max-w-[130px] line-clamp-2 leading-tight">{topic || "-"}</span>
-                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase bg-${theme.color}-500/20 text-${theme.color}-400 border border-${theme.color}-500/30`}>{theme.label}</span>
+                                    return (
+                                        <div key={qNum} className={`flex flex-col md:flex-row gap-4 p-4 rounded-xl border border-${theme.color}-900/30 bg-${theme.color}-900/5 ${currentReason ? 'opacity-60' : 'opacity-100'} transition-opacity hover:opacity-100`}>
+                                            <div className="flex flex-col items-center justify-center min-w-[140px] text-center border-r border-gray-800 pr-4">
+                                                <span className="text-xs font-bold text-gray-500 mb-1">QUESTÃO {qNum}</span>
+                                                <span className="text-[10px] text-yellow-500/80 font-bold uppercase mb-0.5 max-w-[130px] truncate">{subject}</span>
+                                                <span className="text-[9px] text-gray-400 font-medium mb-2 max-w-[130px] line-clamp-2 leading-tight">{topic || "-"}</span>
+                                                <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase bg-${theme.color}-500/20 text-${theme.color}-400 border border-${theme.color}-500/30`}>{theme.label}</span>
+                                            </div>
+                                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                {theme.options.map(opt => (
+                                                    <button key={opt.id} onClick={() => setAnswersMap(prev => ({...prev, [qNum]: opt.id}))} className={`text-left p-3 rounded-lg border text-sm font-medium transition-all flex flex-col justify-center ${currentReason === opt.id ? 'bg-yellow-500 text-black border-yellow-500 font-bold shadow-lg' : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'}`}>
+                                                        <span>{opt.label}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
-                                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                            {theme.options.map(opt => (
-                                                <button key={opt.id} onClick={() => setAnswersMap(prev => ({...prev, [qNum]: opt.id}))} className={`text-left p-3 rounded-lg border text-sm font-medium transition-all flex flex-col justify-center ${currentReason === opt.id ? 'bg-yellow-500 text-black border-yellow-500 font-bold shadow-lg' : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'}`}>
-                                                    <span>{opt.label}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <div className="flex justify-end">
+                            <button 
+                                onClick={handleFinishDiagnosis} 
+                                disabled={Object.keys(answersMap).length < exam.questionCount} 
+                                className={`px-8 py-4 rounded-xl font-black text-sm uppercase tracking-wider transition-all flex items-center gap-3 shadow-xl ${Object.keys(answersMap).length < exam.questionCount ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-400 text-black transform hover:scale-105'}`}
+                            >
+                                {loading ? 'PROCESSANDO...' : 'GERAR RELATÓRIO DE INTELIGÊNCIA'}
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                            </button>
                         </div>
                     </div>
-                    <div className="flex justify-end">
-                        <button 
-                            onClick={handleFinishDiagnosis} 
-                            disabled={Object.keys(answersMap).length < exam.questionCount} 
-                            className={`px-8 py-4 rounded-xl font-black text-sm uppercase tracking-wider transition-all flex items-center gap-3 shadow-xl ${Object.keys(answersMap).length < exam.questionCount ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-yellow-500 hover:bg-yellow-400 text-black transform hover:scale-105'}`}
-                        >
-                            {loading ? 'PROCESSANDO...' : 'GERAR RELATÓRIO DE INTELIGÊNCIA'}
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                        </button>
-                    </div>
+
+                    {/* Coluna Direita: Painel Fixo de Instruções */}
+                    <InstructionPanel hasPenalty={exam.hasPenalty} />
                 </div>
             )}
 

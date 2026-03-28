@@ -28,6 +28,7 @@ const SimulatedExamConfigModal: React.FC<SimulatedExamConfigModalProps> = ({
   
   // Basic Data
   const [title, setTitle] = useState('');
+  const [status, setStatus] = useState<ExamStatus>('draft');
   const [publishDate, setPublishDate] = useState<string>('');
   const [type, setType] = useState<ExamType>('multiple_choice');
   const [alternativesCount, setAlternativesCount] = useState<number>(5);
@@ -57,6 +58,7 @@ const SimulatedExamConfigModal: React.FC<SimulatedExamConfigModalProps> = ({
     if (isOpen) {
       if (examToEdit) {
         setTitle(examToEdit.title);
+        setStatus(examToEdit.status || 'draft');
         setPublishDate(examToEdit.publishDate || '');
         setType(examToEdit.type);
         setAlternativesCount(examToEdit.alternativesCount || 5);
@@ -84,6 +86,7 @@ const SimulatedExamConfigModal: React.FC<SimulatedExamConfigModalProps> = ({
       } else {
         // Reset Defaults
         setTitle('');
+        setStatus('draft');
         setPublishDate('');
         setType('multiple_choice');
         setAlternativesCount(5);
@@ -150,7 +153,7 @@ const SimulatedExamConfigModal: React.FC<SimulatedExamConfigModalProps> = ({
             hasBlocks,
             minApprovalPercent: Number(minApprovalPercent),
             isAutoDiagnosisEnabled,
-            status: examToEdit ? examToEdit.status : 'draft'
+            status: status
         };
 
         if (type === 'multiple_choice') {
@@ -250,6 +253,20 @@ const SimulatedExamConfigModal: React.FC<SimulatedExamConfigModalProps> = ({
                         >
                             <option value="multiple_choice">Múltipla Escolha (ABCDE)</option>
                             <option value="true_false">Certo / Errado (Cespe)</option>
+                        </select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase">Status de Publicação</label>
+                        <select 
+                            value={status}
+                            onChange={e => setStatus(e.target.value as ExamStatus)}
+                            className={`w-full bg-zinc-900 border rounded-lg px-4 py-3 text-sm font-bold focus:outline-none transition-all ${
+                                status === 'published' ? 'text-emerald-400 border-emerald-500/30' : 'text-zinc-400 border-zinc-800'
+                            }`}
+                        >
+                            <option value="draft">RASCUNHO (OCULTO PARA ALUNOS)</option>
+                            <option value="published">PUBLICADO (VISÍVEL PARA ALUNOS)</option>
                         </select>
                     </div>
 

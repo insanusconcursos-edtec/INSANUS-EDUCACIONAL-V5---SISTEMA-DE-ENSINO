@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { 
   ChevronLeft, Plus, FileText, BarChart2, 
-  Trash2, Edit, AlertCircle, FileCheck, Info, ListChecks 
+  Trash2, Edit, AlertCircle, FileCheck, Info, ListChecks,
+  Eye, EyeOff
 } from 'lucide-react';
 import { 
   getExams, 
   deleteExam,
+  updateExam,
   SimulatedClass, 
   SimulatedExam 
 } from '../../../services/simulatedService';
@@ -81,6 +83,18 @@ const SimulatedClassDetails: React.FC<SimulatedClassDetailsProps> = ({ classData
         alert("Erro ao excluir simulado.");
     } finally {
         setIsDeleting(false);
+    }
+  };
+
+  const handleToggleStatus = async (exam: SimulatedExam) => {
+    if (!classData.id || !exam.id) return;
+    const newStatus = exam.status === 'published' ? 'draft' : 'published';
+    try {
+        await updateExam(classData.id, exam.id, { status: newStatus });
+        setExams(prev => prev.map(e => e.id === exam.id ? { ...e, status: newStatus } : e));
+    } catch (error) {
+        console.error("Erro ao alterar status:", error);
+        alert("Erro ao alterar status do simulado.");
     }
   };
 
@@ -191,6 +205,22 @@ const SimulatedClassDetails: React.FC<SimulatedClassDetailsProps> = ({ classData
 
                         {/* Actions Column */}
                         <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <button 
+                                onClick={() => handleToggleStatus(exam)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-[10px] font-black uppercase tracking-widest border shadow-sm ${
+                                    exam.status === 'published' 
+                                    ? 'bg-emerald-900/20 border-emerald-500/30 text-emerald-400 hover:bg-emerald-900/40' 
+                                    : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700'
+                                }`}
+                                title={exam.status === 'published' ? 'Despublicar (Voltar para Rascunho)' : 'Publicar Simulado'}
+                            >
+                                {exam.status === 'published' ? (
+                                    <><Eye size={14} /> PUBLICADO</>
+                                ) : (
+                                    <><EyeOff size={14} /> PUBLICAR</>
+                                )}
+                            </button>
+
                             <button 
                                 onClick={() => handleOpenConsole(exam)}
                                 className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-purple-400 hover:text-white rounded-lg transition-colors text-[10px] font-black uppercase tracking-widest border border-zinc-700 hover:border-zinc-600 shadow-sm"

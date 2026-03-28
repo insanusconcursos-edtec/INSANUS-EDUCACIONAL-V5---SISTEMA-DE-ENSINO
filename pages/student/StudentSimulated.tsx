@@ -592,8 +592,8 @@ const StudentSimulated: React.FC = () => {
 
   // === RENDER: EXAMS LIST ===
   if (viewState === 'EXAMS' && selectedClass) {
-      // Exibe todos os simulados, inclusive rascunhos, para testes/debug
-      const visibleExams = exams;
+      // Filtrar apenas simulados PUBLICADOS para o aluno
+      const visibleExams = exams.filter(e => e.status === 'published');
 
       return (
           <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
@@ -665,9 +665,6 @@ const StudentSimulated: React.FC = () => {
                                               <div>
                                                   <div className="flex items-center gap-2">
                                                     <h3 className={`text-lg font-black uppercase tracking-tight ${isBlocked ? 'text-zinc-500' : 'text-white'}`}>{exam.title}</h3>
-                                                    {exam.status === 'draft' && (
-                                                        <span className="px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-500 text-[9px] font-bold uppercase border border-yellow-500/20">Rascunho</span>
-                                                    )}
                                                     {isBlocked && (
                                                         <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-500 text-[9px] font-bold uppercase border border-zinc-700 flex items-center gap-1">
                                                             <Lock size={10} /> BLOQUEADO
