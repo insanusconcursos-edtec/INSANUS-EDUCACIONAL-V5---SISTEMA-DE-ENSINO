@@ -1,7 +1,10 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { LogOut, Maximize2, Layout, GraduationCap, PlayCircle, Home, Video } from 'lucide-react';
+import { 
+  LogOut, Maximize2, Layout, GraduationCap, PlayCircle, Home, Video, 
+  ChevronDown, Map, ClipboardList, MonitorPlay, Users, Radio 
+} from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { SystemLogo } from '../../common/SystemLogo';
 
@@ -9,6 +12,7 @@ const StudentHeader: React.FC = () => {
   const { logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Detect Context
   const isHomeContext = location.pathname.includes('/app/home');
@@ -17,14 +21,6 @@ const StudentHeader: React.FC = () => {
   const isPresentialContext = location.pathname.includes('/app/presential');
   const isLiveEventsContext = location.pathname.includes('/app/eventos-ao-vivo');
   const isPlanContext = !isHomeContext && !isSimulatedContext && !isCoursesContext && !isPresentialContext && !isLiveEventsContext;
-
-  // Lógica para o valor do Select Mobile
-  let currentSelectValue = '/app/dashboard';
-  if (isHomeContext) currentSelectValue = '/app/home';
-  if (isSimulatedContext) currentSelectValue = '/app/simulated';
-  if (isCoursesContext) currentSelectValue = '/app/courses';
-  if (isPresentialContext) currentSelectValue = '/app/presential';
-  if (isLiveEventsContext) currentSelectValue = '/app/eventos-ao-vivo';
 
   const toggleFullScreen = () => {
     if (!document.fullscreenElement) {
@@ -136,26 +132,70 @@ const StudentHeader: React.FC = () => {
         </Link>
       </div>
 
-      {/* 2. VERSÃO MOBILE/TABLET (Select Dropdown) - Visível apenas em Mobile/Tablet (flex lg:hidden) */}
-      <div className="flex lg:hidden flex-1 mx-3 max-w-[240px]">
-        <div className="relative w-full">
-            <select
-                value={currentSelectValue}
-                onChange={(e) => navigate(e.target.value)}
-                className="w-full appearance-none bg-zinc-900 border border-zinc-800 text-white text-[10px] font-bold uppercase rounded-lg py-2 pl-3 pr-8 focus:border-brand-red outline-none transition-colors truncate"
-            >
-                <option value="/app/home">🏠 Home</option>
-                <option value="/app/dashboard">📌 Planos</option>
-                <option value="/app/simulados">🎓 Simulados</option>
-                <option value="/app/courses">▶️ Cursos</option>
-                <option value="/app/presential">🏫 Presencial</option>
-                <option value="/app/eventos-ao-vivo">🔴 Ao Vivo</option>
-            </select>
-            {/* Ícone de Seta customizado para o Select */}
-            <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-zinc-500">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      {/* 2. VERSÃO MOBILE/TABLET (Dropdown Customizado) - Visível apenas em Mobile/Tablet (flex lg:hidden) */}
+      <div className="flex lg:hidden flex-1 mx-3 max-w-[240px] relative">
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="w-full flex items-center justify-between bg-zinc-900 border border-zinc-800 text-white text-[10px] font-bold uppercase rounded-lg py-2.5 px-4 focus:border-brand-red outline-none transition-all"
+        >
+          <div className="flex items-center gap-2 truncate">
+            {isHomeContext && <Home className="w-3.5 h-3.5 text-brand-red" />}
+            {isPlanContext && <Map className="w-3.5 h-3.5 text-brand-red" />}
+            {isSimulatedContext && <ClipboardList className="w-3.5 h-3.5 text-brand-red" />}
+            {isCoursesContext && <MonitorPlay className="w-3.5 h-3.5 text-brand-red" />}
+            {isPresentialContext && <Users className="w-3.5 h-3.5 text-brand-red" />}
+            {isLiveEventsContext && <Radio className="w-3.5 h-3.5 text-brand-red" />}
+            
+            <span>
+              {isHomeContext ? 'Home' : 
+               isPlanContext ? 'Planos' : 
+               isSimulatedContext ? 'Simulados' : 
+               isCoursesContext ? 'Cursos' : 
+               isPresentialContext ? 'Presencial' : 
+               isLiveEventsContext ? 'Ao Vivo' : 'Menu'}
+            </span>
+          </div>
+          <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-300 ${isMobileMenuOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {/* Menu Flutuante */}
+        {isMobileMenuOpen && (
+          <>
+            <div 
+              className="fixed inset-0 z-40" 
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <div className="absolute top-full left-0 w-full mt-2 bg-[#1A1A1A] border border-zinc-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="p-1.5 flex flex-col gap-1">
+                {[
+                  { path: '/app/home', label: 'Home', icon: Home, active: isHomeContext },
+                  { path: '/app/dashboard', label: 'Planos', icon: Map, active: isPlanContext },
+                  { path: '/app/simulated', label: 'Simulados', icon: ClipboardList, active: isSimulatedContext },
+                  { path: '/app/courses', label: 'Cursos', icon: MonitorPlay, active: isCoursesContext },
+                  { path: '/app/presential', label: 'Presencial', icon: Users, active: isPresentialContext },
+                  { path: '/app/eventos-ao-vivo', label: 'Ao Vivo', icon: Radio, active: isLiveEventsContext },
+                ].map((item) => (
+                  <button
+                    key={item.path}
+                    onClick={() => {
+                      navigate(item.path);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`
+                      flex items-center gap-3 px-4 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all
+                      ${item.active 
+                        ? 'bg-red-500/10 text-red-500' 
+                        : 'text-zinc-500 hover:bg-red-500/5 hover:text-red-500'}
+                    `}
+                  >
+                    <item.icon className={`w-4 h-4 ${item.active ? 'text-red-500' : ''}`} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-        </div>
+          </>
+        )}
       </div>
 
       {/* --- DIREITA: UTILITÁRIOS --- */}

@@ -100,7 +100,69 @@ const ActionAccordion: React.FC<{ type: 'WEAK' | 'REVIEW' | 'STRONG'; count: num
     );
 };
 
-// --- SUBCOMPONENTE 3: PAINEL DE INSTRUÇÕES (STICKY) ---
+// --- SUBCOMPONENTE 3: SELETOR CUSTOMIZADO ---
+const CustomReasonSelect: React.FC<{
+    options: any[];
+    value: string;
+    onChange: (val: string) => void;
+}> = ({ options, value, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const selectedOption = options.find(opt => opt.id === value);
+
+    return (
+        <div className="relative w-full">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all duration-300 ${
+                    value 
+                        ? 'bg-red-500/10 border-red-500/40 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.1)]' 
+                        : 'bg-[#0F1115] border-gray-800 text-gray-500 hover:border-gray-600 hover:bg-[#16191F]'
+                }`}
+            >
+                <div className="flex items-center gap-3 overflow-hidden">
+                    {value && <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] flex-shrink-0" />}
+                    <span className={`text-sm whitespace-normal break-words ${value ? 'font-bold' : 'font-medium'}`}>
+                        {selectedOption ? selectedOption.label : 'Qual o motivo desse resultado?'}
+                    </span>
+                </div>
+                <svg 
+                    className={`w-4 h-4 transition-transform duration-300 ${isOpen ? 'rotate-180 text-red-500' : 'text-gray-600'}`} 
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            {isOpen && (
+                <>
+                    <div className="fixed inset-0 z-[100]" onClick={() => setIsOpen(false)} />
+                    <div className="absolute z-[110] w-full mt-2 bg-[#1A1D24] border border-gray-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-1.5 space-y-1">
+                            {options.map((opt) => (
+                                <button
+                                    key={opt.id}
+                                    onClick={() => {
+                                        onChange(opt.id);
+                                        setIsOpen(false);
+                                    }}
+                                    className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-all ${
+                                        value === opt.id 
+                                            ? 'bg-red-500 text-white font-bold shadow-lg' 
+                                            : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                                    }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+};
+
+// --- SUBCOMPONENTE 4: PAINEL DE INSTRUÇÕES (STICKY) ---
 const InstructionPanel: React.FC<{ hasPenalty: boolean }> = ({ hasPenalty }) => (
     <div className="w-full lg:w-1/3 sticky top-24 bg-[#1A1A1A] border border-gray-800 rounded-lg p-5 shadow-2xl">
         <h3 className="text-white font-bold text-lg mb-4 uppercase tracking-wider border-b border-gray-800 pb-2">Entenda os Motivos</h3>
@@ -273,14 +335,18 @@ export const StudentAutoDiagnosis: React.FC<{ exam: SimulatedExam, attempt: Simu
     return (
         <div className="w-full animate-in fade-in duration-500">
             {/* TÍTULO E CABEÇALHO */}
-            <div className="mb-6 p-6 rounded-2xl border border-yellow-500/20 bg-gradient-to-r from-yellow-900/10 to-transparent">
-                <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">🧠</span>
-                    <h2 className="text-2xl font-black text-white uppercase tracking-wider">
-                        Autodiagnóstico de Performance
+            <div className="mb-6 p-6 rounded-2xl border border-yellow-500/20 bg-gradient-to-r from-yellow-900/10 to-transparent flex flex-col items-center justify-center text-center w-full">
+                <div className="flex flex-col items-center justify-center text-center w-full mb-2">
+                    <span className="text-2xl mb-2">🧠</span>
+                    <h2 
+                        className="w-full whitespace-normal text-center font-black text-white uppercase tracking-wider text-lg md:text-3xl"
+                        style={{ fontFamily: "'Orbitron', sans-serif" }}
+                    >
+                        <span className="block">AUTODIAGNÓSTICO</span>
+                        <span className="block">DE PERFORMANCE</span>
                     </h2>
                 </div>
-                <p className="text-gray-400 text-sm max-w-2xl">
+                <p className="text-gray-400 text-sm max-w-2xl text-center">
                     {step === 'FORM' 
                         ? 'Identifique o motivo dos seus erros e acertos para gerar um plano de ação personalizado.' 
                         : 'Aqui está o seu mapeamento estratégico dividido por disciplina. Expanda os itens para ver os planos de ação.'}
@@ -289,7 +355,7 @@ export const StudentAutoDiagnosis: React.FC<{ exam: SimulatedExam, attempt: Simu
 
             {/* CONTEÚDO: FORMULÁRIO */}
             {step === 'FORM' && (
-                <div className="flex flex-col lg:flex-row gap-6 items-start">
+                <div className="flex flex-col-reverse lg:flex-row gap-6 items-start">
                     {/* Coluna Esquerda: Questões (Flex-1) */}
                     <div className="flex-1 w-full flex flex-col gap-4">
                         <div className="bg-[#121418] rounded-2xl border border-gray-800 p-1">
@@ -299,7 +365,7 @@ export const StudentAutoDiagnosis: React.FC<{ exam: SimulatedExam, attempt: Simu
                                     {Math.round((Object.keys(answersMap).length / exam.questionCount) * 100)}%
                                 </span>
                             </div>
-                            <div className="max-h-[600px] overflow-y-auto p-6 space-y-3 scrollbar-thin scrollbar-thumb-gray-700">
+                            <div className="max-h-[600px] overflow-y-auto p-6 pb-48 space-y-3 scrollbar-thin scrollbar-thumb-gray-700">
                                 {Array.from({ length: exam.questionCount }).map((_, idx) => {
                                     const qNum = idx + 1;
                                     const status = (() => {
@@ -317,19 +383,27 @@ export const StudentAutoDiagnosis: React.FC<{ exam: SimulatedExam, attempt: Simu
                                     else if (status === 'WRONG') theme = { color: 'red', label: 'ERRO', options: REASONS.WRONG };
 
                                     return (
-                                        <div key={qNum} className={`flex flex-col md:flex-row gap-4 p-4 rounded-xl border border-${theme.color}-900/30 bg-${theme.color}-900/5 ${currentReason ? 'opacity-60' : 'opacity-100'} transition-opacity hover:opacity-100`}>
-                                            <div className="flex flex-col items-center justify-center min-w-[140px] text-center border-r border-gray-800 pr-4">
-                                                <span className="text-xs font-bold text-gray-500 mb-1">QUESTÃO {qNum}</span>
-                                                <span className="text-[10px] text-yellow-500/80 font-bold uppercase mb-0.5 max-w-[130px] truncate">{subject}</span>
-                                                <span className="text-[9px] text-gray-400 font-medium mb-2 max-w-[130px] line-clamp-2 leading-tight">{topic || "-"}</span>
-                                                <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase bg-${theme.color}-500/20 text-${theme.color}-400 border border-${theme.color}-500/30`}>{theme.label}</span>
+                                        <div key={qNum} className={`flex flex-col md:flex-row gap-4 p-4 rounded-xl border border-gray-800 bg-[#1A1D24]/50 ${currentReason ? 'opacity-60' : 'opacity-100'} transition-all hover:opacity-100 hover:border-gray-700 group`}>
+                                            <div className="flex flex-col items-center md:justify-center gap-1 md:min-w-[180px] md:border-r border-gray-800 md:pr-4 w-full md:w-auto">
+                                                {/* Tag de Status no Topo */}
+                                                <div className="flex w-full justify-center mb-3 md:mb-2">
+                                                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-md uppercase bg-${theme.color}-500/10 text-${theme.color}-500 border border-${theme.color}-500/20 whitespace-normal text-center`}>
+                                                        {theme.label}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="flex flex-col items-center text-center w-full">
+                                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Questão {qNum}</span>
+                                                    <span className="text-[11px] text-yellow-500/90 font-bold uppercase whitespace-normal break-words w-full">{subject}</span>
+                                                    <span className="text-[10px] text-gray-400 font-medium whitespace-normal break-words w-full leading-tight">{topic || "-"}</span>
+                                                </div>
                                             </div>
-                                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                                {theme.options.map(opt => (
-                                                    <button key={opt.id} onClick={() => setAnswersMap(prev => ({...prev, [qNum]: opt.id}))} className={`text-left p-3 rounded-lg border text-sm font-medium transition-all flex flex-col justify-center ${currentReason === opt.id ? 'bg-yellow-500 text-black border-yellow-500 font-bold shadow-lg' : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700'}`}>
-                                                        <span>{opt.label}</span>
-                                                    </button>
-                                                ))}
+                                            <div className="flex-1 flex items-center w-full">
+                                                <CustomReasonSelect 
+                                                    options={theme.options} 
+                                                    value={currentReason} 
+                                                    onChange={(val) => setAnswersMap(prev => ({...prev, [qNum]: val}))}
+                                                />
                                             </div>
                                         </div>
                                     );

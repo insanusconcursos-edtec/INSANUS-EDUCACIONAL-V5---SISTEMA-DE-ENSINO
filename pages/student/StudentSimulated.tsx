@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  GraduationCap, Layers, ChevronRight, FileCheck, AlertCircle, PlayCircle, BarChart2, ArrowLeft, Trophy,
-  Search, Filter, Building2, ListChecks, Check, X, Minus, Medal, User, Lock
+  GraduationCap, Layers, ChevronRight, ChevronDown, FileCheck, AlertCircle, PlayCircle, BarChart2, ArrowLeft, Trophy,
+  Search, Filter, Building2, ListChecks, Check, X, Minus, Medal, User, Lock, Brain
 } from 'lucide-react';
 import { doc, getDoc, collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebase';
@@ -77,7 +77,7 @@ const ExamResult: React.FC<{
     
     // Estado para controlar as Abas
     const [activeTab, setActiveTab] = useState<'PERFORMANCE' | 'RANKING' | 'AUTODIAGNOSIS'>('PERFORMANCE'); 
-    
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);    
     // Estados do Ranking
     const [rankingData, setRankingData] = useState<SimulatedAttempt[]>([]);
     const [loadingRanking, setLoadingRanking] = useState(false);
@@ -146,8 +146,8 @@ const ExamResult: React.FC<{
                     </button>
                 </div>
 
-                {/* NAVEGAÇÃO EM ABAS (TABS) */}
-                <div className="flex items-center gap-6 border-b border-gray-800 mb-8 overflow-x-auto">
+                {/* NAVEGAÇÃO EM ABAS (TABS) - DESKTOP */}
+                <div className="hidden md:flex items-center gap-6 border-b border-gray-800 mb-8 overflow-x-auto">
                     {/* Aba 1: Desempenho */}
                     <button
                         onClick={() => setActiveTab('PERFORMANCE')}
@@ -162,7 +162,7 @@ const ExamResult: React.FC<{
                             onClick={() => setActiveTab('AUTODIAGNOSIS')}
                             className={`pb-4 px-2 text-sm font-bold uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 ${activeTab === 'AUTODIAGNOSIS' ? 'border-yellow-500 text-yellow-500' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
                         >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                            <Brain className="w-4 h-4" />
                             Autodiagnóstico
                         </button>
                     )}
@@ -174,6 +174,53 @@ const ExamResult: React.FC<{
                     >
                         Ranking Geral
                     </button>
+                </div>
+
+                {/* NAVEGAÇÃO EM ABAS (DROPDOWN) - MOBILE */}
+                <div className="flex md:hidden flex-col w-full mb-6 relative">
+                    <button 
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className="flex items-center justify-between w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-[10px] font-black uppercase tracking-widest transition-all"
+                    >
+                        <div className="flex items-center gap-3">
+                            {activeTab === 'PERFORMANCE' && <BarChart2 size={16} className="text-red-600" />}
+                            {activeTab === 'AUTODIAGNOSIS' && <Brain size={16} className="text-red-600" />}
+                            {activeTab === 'RANKING' && <Trophy size={16} className="text-red-600" />}
+                            <span>
+                                {activeTab === 'PERFORMANCE' ? 'Meu Desempenho' : 
+                                 activeTab === 'AUTODIAGNOSIS' ? 'Autodiagnóstico' : 'Ranking Geral'}
+                            </span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isDropdownOpen && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-[#1A1A1A] border border-zinc-800 rounded-xl shadow-2xl z-[60] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                            <button 
+                                onClick={() => { setActiveTab('PERFORMANCE'); setIsDropdownOpen(false); }}
+                                className={`w-full flex items-center gap-3 px-4 py-4 text-[10px] font-black uppercase tracking-widest transition-colors border-b border-zinc-800/50 ${activeTab === 'PERFORMANCE' ? 'text-red-600 bg-red-600/5' : 'text-zinc-400 hover:text-red-600 hover:bg-zinc-800/50'}`}
+                            >
+                                <BarChart2 size={16} />
+                                Meu Desempenho
+                            </button>
+                            {exam.isAutoDiagnosisEnabled && (
+                                <button 
+                                    onClick={() => { setActiveTab('AUTODIAGNOSIS'); setIsDropdownOpen(false); }}
+                                    className={`w-full flex items-center gap-3 px-4 py-4 text-[10px] font-black uppercase tracking-widest transition-colors border-b border-zinc-800/50 ${activeTab === 'AUTODIAGNOSIS' ? 'text-red-600 bg-red-600/5' : 'text-zinc-400 hover:text-red-600 hover:bg-zinc-800/50'}`}
+                                >
+                                    <Brain size={16} />
+                                    Autodiagnóstico
+                                </button>
+                            )}
+                            <button 
+                                onClick={() => { setActiveTab('RANKING'); setIsDropdownOpen(false); }}
+                                className={`w-full flex items-center gap-3 px-4 py-4 text-[10px] font-black uppercase tracking-widest transition-colors ${activeTab === 'RANKING' ? 'text-red-600 bg-red-600/5' : 'text-zinc-400 hover:text-red-600 hover:bg-zinc-800/50'}`}
+                            >
+                                <Trophy size={16} />
+                                Ranking Geral
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -215,7 +262,7 @@ const ExamResult: React.FC<{
                                 
                                 {/* 1. CADERNO DE QUESTÕES */}
                                 {exam.files?.bookletUrl ? (
-                                    <div className="bg-[#1a1d24] border border-gray-800 p-5 rounded-xl flex items-center justify-between group hover:border-gray-600 transition-all shadow-lg">
+                                    <div className="bg-[#1a1d24] border border-gray-800 p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between group hover:border-gray-600 transition-all shadow-lg gap-4">
                                         <div className="flex items-center gap-4">
                                             <div className="p-3 bg-gray-800 rounded-lg text-gray-400 group-hover:text-white group-hover:bg-gray-700 transition-all">
                                                 {/* Ícone de Documento */}
@@ -226,13 +273,15 @@ const ExamResult: React.FC<{
                                                 <p className="text-gray-500 text-xs">Baixar arquivo da prova</p>
                                             </div>
                                         </div>
-                                        <button 
-                                            onClick={() => window.open(exam.files.bookletUrl, '_blank')}
-                                            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold rounded-lg border border-gray-700 transition-all flex items-center gap-2 uppercase tracking-wider"
-                                        >
-                                            Visualizar
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                        </button>
+                                        <div className="w-full md:w-auto flex justify-center mt-2 md:mt-0">
+                                            <button 
+                                                onClick={() => window.open(exam.files.bookletUrl, '_blank')}
+                                                className="w-full md:w-auto px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold rounded-lg border border-gray-700 transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
+                                            >
+                                                Visualizar
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 ) : (
                                     /* Estado vazio caso não tenha PDF cadastrado */
@@ -246,7 +295,7 @@ const ExamResult: React.FC<{
 
                                 {/* 2. GABARITO COMENTADO */}
                                 {exam.files?.answerKeyUrl ? (
-                                    <div className="bg-[#1a1d24] border border-gray-800 p-5 rounded-xl flex items-center justify-between group hover:border-green-900/50 transition-all shadow-lg">
+                                    <div className="bg-[#1a1d24] border border-gray-800 p-5 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between group hover:border-green-900/50 transition-all shadow-lg gap-4">
                                         <div className="flex items-center gap-4">
                                             <div className="p-3 bg-gray-800 rounded-lg text-gray-400 group-hover:text-green-400 group-hover:bg-green-900/20 transition-all">
                                                 {/* Ícone de Check/Gabarito */}
@@ -257,13 +306,15 @@ const ExamResult: React.FC<{
                                                 <p className="text-gray-500 text-xs">Baixar gabarito oficial</p>
                                             </div>
                                         </div>
-                                        <button 
-                                            onClick={() => window.open(exam.files.answerKeyUrl, '_blank')}
-                                            className="px-4 py-2 bg-gray-800 hover:bg-green-600 text-white text-xs font-bold rounded-lg border border-gray-700 hover:border-green-500 transition-all flex items-center gap-2 uppercase tracking-wider"
-                                        >
-                                            Visualizar
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                        </button>
+                                        <div className="w-full md:w-auto flex justify-center mt-2 md:mt-0">
+                                            <button 
+                                                onClick={() => window.open(exam.files.answerKeyUrl, '_blank')}
+                                                className="w-full md:w-auto px-4 py-2 bg-gray-800 hover:bg-green-600 text-white text-xs font-bold rounded-lg border border-gray-700 hover:border-green-500 transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
+                                            >
+                                                Visualizar
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                            </button>
+                                        </div>
                                     </div>
                                 ) : (
                                     /* Estado vazio */
