@@ -739,9 +739,10 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
 };
 
 export const getLocalISODate = (date: Date = new Date()): string => {
-  const offset = date.getTimezoneOffset() * 60000;
-  const localDate = new Date(date.getTime() - offset);
-  return localDate.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export const getRangeSchedule = async (userId: string, startDate: Date, endDate: Date): Promise<Record<string, ScheduledEvent[]>> => {
@@ -776,7 +777,8 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
   console.log(`Starting rescheduleOverdueTasks for user ${userId}, plan ${planId}`);
   const schedulesRef = collection(db, 'users', userId, 'schedules');
   const snapshot = await getDocs(schedulesRef);
-  const batch = writeBatch(db);
+  let batch = writeBatch(db);
+  let batchCount = 0;
   const todayStr = getLocalISODate(new Date());
   
   const overdueTasks: any[] = [];
@@ -785,10 +787,10 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
 
   const sortedDocs = [...snapshot.docs].sort((a, b) => a.id.localeCompare(b.id));
 
-  sortedDocs.forEach(document => {
+  for (const document of sortedDocs) {
     const dateStr = document.id;
     const data = document.data();
-    if (!data.items) return;
+    if (!data.items) continue;
 
     if (dateStr < todayStr) {
       // Coleta atrasadas deste plano
@@ -798,8 +800,10 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
         const remaining = data.items.filter((i: any) => !(i.planId === planId && i.status === 'pending'));
         if (remaining.length === 0) {
           batch.delete(document.ref);
+          batchCount++;
         } else {
           batch.set(document.ref, cleanObject({ date: dateStr, items: remaining }));
+          batchCount++;
         }
       }
     } else if (dateStr === todayStr) {
@@ -810,14 +814,22 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
         const itemsWithDate = data.items.map((i: any) => ({ ...i, date: dateStr }));
         allFutureTasks.push(...itemsWithDate);
         batch.delete(document.ref);
+        batchCount++;
       }
     } else {
       // Futuro
       const itemsWithDate = data.items.map((i: any) => ({ ...i, date: dateStr }));
       allFutureTasks.push(...itemsWithDate);
       batch.delete(document.ref);
+      batchCount++;
     }
-  });
+
+    if (batchCount >= 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      batchCount = 0;
+    }
+  }
 
   if (overdueTasks.length === 0 && allFutureTasks.length === 0) return 0;
 
@@ -871,7 +883,7 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
 
   // Função auxiliar para calcular capacidade real do dia (Routine - FixedTasks)
   const getRealDayCapacity = (date: Date) => {
-    const dStr = date.toISOString().split('T')[0];
+    const dStr = getLocalISODate(date);
     const baseCap = safeRoutine[date.getDay()] || 0;
     const fixedItems = newFutureSchedules.get(dStr) || [];
     const fixedDuration = fixedItems.reduce((acc, item) => acc + (item.calculatedDuration || item.duration || 0), 0);
@@ -879,6 +891,7 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
   };
 
   let currentDayCapacity = getRealDayCapacity(currentDate);
+  let hasBypassedToday = false;
 
   // Loop de redistribuição (Empuxo)
   for (const task of tasksToShift) {
@@ -916,13 +929,18 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
     let pendingQuestions = [...(task.questions || [])];
 
     while (remainingDuration > 0) {
-      let dStr = currentDate.toISOString().split('T')[0];
+      let dStr = getLocalISODate(currentDate);
       let hasSimulado = newFutureSchedules.get(dStr)?.some(i => i.type?.toLowerCase() === 'simulado');
 
       while (currentDayCapacity <= 0 || hasSimulado) {
+        // Proteção de Capacidade: Se for hoje e houver metas atrasadas, permite alocar pelo menos uma
+        const isOverdue = overdueTasks.some(ot => (ot.id === task.id || ot.taskId === task.taskId || ot.metaId === task.metaId));
+        if (dStr === todayStr && isOverdue && !hasBypassedToday) {
+          break;
+        }
         currentDate.setDate(currentDate.getDate() + 1);
         currentDayCapacity = getRealDayCapacity(currentDate);
-        dStr = currentDate.toISOString().split('T')[0];
+        dStr = getLocalISODate(currentDate);
         hasSimulado = newFutureSchedules.get(dStr)?.some(i => i.type?.toLowerCase() === 'simulado');
       }
 
@@ -940,6 +958,13 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
       }
 
       let allocated = !isSplittableType ? remainingDuration : Math.min(remainingDuration, currentDayCapacity);
+
+      // Alocação Forçada Mínima: Se for hoje e atrasada, garante pelo menos 15 min para não travar
+      const isOverdue = overdueTasks.some(ot => (ot.id === task.id || ot.taskId === task.taskId || ot.metaId === task.metaId));
+      if (dStr === todayStr && isOverdue && !hasBypassedToday && allocated <= 0) {
+        allocated = Math.min(remainingDuration, 15);
+        hasBypassedToday = true;
+      }
       
       // Motor de Fatiamento de Conteúdo
       const consumedVideos: any[] = [];
@@ -1056,15 +1081,30 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
   if (preserveToday) {
     const todayDocRef = doc(db, 'users', userId, 'schedules', todayStr);
     batch.set(todayDocRef, cleanObject({ date: todayStr, items: todayItems }), { merge: true });
+    batchCount++;
+    if (batchCount >= 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      batchCount = 0;
+    }
   }
 
   // Persistir novos dias
   for (const [date, items] of newFutureSchedules.entries()) {
     const docRef = doc(db, 'users', userId, 'schedules', date);
     batch.set(docRef, cleanObject({ date, items }));
+    batchCount++;
+    
+    if (batchCount >= 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      batchCount = 0;
+    }
   }
 
-  await batch.commit();
+  if (batchCount > 0) {
+    await batch.commit();
+  }
   console.log("Reschedule completed. Total overdue processed:", overdueTasks.length);
   return overdueTasks.length;
 };
