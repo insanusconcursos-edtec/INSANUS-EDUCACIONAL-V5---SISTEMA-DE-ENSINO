@@ -1,5 +1,5 @@
 import { getAdminConfig } from './firebaseAdmin.js';
-import { sendWelcomeEmail } from './emailService.js';
+import { sendWelcomeEmail, sendAccessNotificationEmail } from './emailService.js';
 import crypto from 'crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
@@ -264,6 +264,9 @@ export const provisionTictoPurchase = async (customerData: CustomerData, tictoPr
           updateData.products = FieldValue.arrayUnion(...accessesToGrant.filter(a => a.type === 'product'));
           await userRef.update(updateData);
           console.log(`[PROVISIONAMENTO] Novos acessos adicionados para o usuário existente ${customerData.email}`);
+          
+          // Enviar e-mail de notificação de novo acesso para aluno existente
+          await sendAccessNotificationEmail(userData.name || customerData.name, customerData.email, productData.name);
         } else {
           await userRef.update(updateData);
           console.log(`[PROVISIONAMENTO] Usuário ${customerData.email} já possui acesso ativo ao produto ${safeProductId}`);
