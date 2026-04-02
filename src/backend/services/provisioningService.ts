@@ -219,6 +219,7 @@ export const provisionTictoPurchase = async (customerData: CustomerData, tictoPr
       // Enviar e-mail de boas-vindas real
       console.log(`Usuário criado. Enviando e-mail de boas-vindas...`);
       await sendWelcomeEmail(customerData.name, customerData.email, generatedPassword);
+      console.log(`✉️ E-mail de primeiro acesso enviado para ${customerData.email}`);
 
     } else {
       // 4. SE FOR ALUNO EXISTENTE
@@ -264,13 +265,14 @@ export const provisionTictoPurchase = async (customerData: CustomerData, tictoPr
           updateData.products = FieldValue.arrayUnion(...accessesToGrant.filter(a => a.type === 'product'));
           await userRef.update(updateData);
           console.log(`[PROVISIONAMENTO] Novos acessos adicionados para o usuário existente ${customerData.email}`);
-          
-          // Enviar e-mail de notificação de novo acesso para aluno existente
-          await sendAccessNotificationEmail(userData.name || customerData.name, customerData.email, productData.name);
         } else {
           await userRef.update(updateData);
-          console.log(`[PROVISIONAMENTO] Usuário ${customerData.email} já possui acesso ativo ao produto ${safeProductId}`);
+          console.log(`[PROVISIONAMENTO] Usuário ${customerData.email} já possui acesso ativo ao produto ${safeProductId}. Reenviando instruções...`);
         }
+
+        // FORÇAR DISPARO DE E-MAIL MESMO PARA USUÁRIO EXISTENTE
+        await sendAccessNotificationEmail(userData.name || customerData.name, customerData.email, productData.name);
+        console.log(`✉️ E-mail de reforço enviado para ${customerData.email}`);
       }
     }
 

@@ -58,16 +58,21 @@ export const sendAccessNotificationEmail = async (name: string, email: string, p
   const mailOptions = {
     from: `"Insanus Educacional" <${process.env.SMTP_USER || 'seu-email@gmail.com'}>`,
     to: email,
-    subject: 'Novo Acesso Liberado! - Insanus',
+    subject: '🚀 Seu acesso à Mentoria Insanus foi liberado!',
     html: `
       <div style="font-family: Arial, sans-serif; background-color: #111; color: #fff; padding: 20px; border-radius: 8px;">
-        <h2 style="color: #e53e3e;">Olá, ${name}!</h2>
-        <p>Identificamos uma nova compra e seu acesso ao produto <strong>${productName}</strong> já está disponível na sua conta.</p>
-        <p>Como você já possui cadastro, basta fazer login com seu e-mail e senha habituais.</p>
-        <p>Acesse a plataforma através do link abaixo:</p>
-        <p><strong>URL:</strong> <a href="https://www.portal-insanus.com/login" style="color: #60a5fa;">Acessar Plataforma</a></p>
+        <h1 style="color: #e53e3e;">Olá, combatente!</h1>
+        <p>Seu acesso ao produto <strong>${productName}</strong> foi confirmado com sucesso.</p>
+        <p>Como você já possui cadastro em nossa plataforma, basta acessar com seu e-mail e senha habitual.</p>
+        <br>
+        <a href="https://www.portal-insanus.com" style="background:#00d2ff; color:#fff; padding:15px 25px; text-decoration:none; border-radius:5px; font-weight:bold; display: inline-block;">
+            ACESSAR MEU PORTAL AGORA
+        </a>
+        <br><br>
+        <p>Caso não lembre sua senha, utilize a opção "Esqueci minha senha" na tela de login.</p>
+        <p><strong>Bons estudos, foca na farda!</strong></p>
         <hr style="border-color: #333; margin: 20px 0;" />
-        <p style="font-size: 12px; color: #888;">Bons estudos!</p>
+        <p style="font-size: 12px; color: #888;">Equipe Insanus Educacional</p>
       </div>
     `
   };
