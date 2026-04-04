@@ -40,6 +40,7 @@ export interface ScheduledEvent {
   recordedMinutes?: number;
   subject?: string;
   discipline?: string;
+  cycleName?: string;
   
   // Content fields (enriched dynamically)
   videos?: any[];
@@ -226,11 +227,15 @@ const generateExecutionQueue = (cycles: any[], logicalSubjectsBySubj: Record<str
                hasMoreTopicsGlobal = true;
                topicsAddedInThisGlobalRound = true;
 
-               const groupsToProcess = groups.slice(currentIdx, currentIdx + topicsPerRound);
-               groupsToProcess.forEach(g => {
-                   const tasksWithCycle = g.tasks.map(t => ({ ...t, cycleId: cycle.id }));
-                   flatQueue.push(...tasksWithCycle);
-               });
+                const groupsToProcess = groups.slice(currentIdx, currentIdx + topicsPerRound);
+                groupsToProcess.forEach(g => {
+                    const tasksWithCycle = g.tasks.map(t => ({ 
+                      ...t, 
+                      cycleId: cycle.id,
+                      cycleName: cycle.title || cycle.name
+                    }));
+                    flatQueue.push(...tasksWithCycle);
+                });
                
                progress[subjectId] += topicsPerRound;
              }
@@ -268,7 +273,11 @@ const generateExecutionQueue = (cycles: any[], logicalSubjectsBySubj: Record<str
 
                 const groupsToProcess = groups.slice(currentIdx, currentIdx + topicsPerRound);
                 groupsToProcess.forEach(g => {
-                    const tasksWithCycle = g.tasks.map(t => ({ ...t, cycleId: cycle.id }));
+                    const tasksWithCycle = g.tasks.map(t => ({ 
+                      ...t, 
+                      cycleId: cycle.id,
+                      cycleName: cycle.title || cycle.name
+                    }));
                     flatQueue.push(...tasksWithCycle);
                 });
                 
@@ -620,7 +629,7 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
         (t.metaId && task.metaId && t.metaId === task.metaId) ||
         (t.taskId && task.taskId && t.taskId === task.taskId) ||
         (t.id && task.id && t.id === task.id) ||
-        (t.title === task.title && t.type === task.type) // Fallback Nominal
+        (t.title === task.title && t.type === task.type && t.order === task.order)
       );
       
       if (existingTask) {
@@ -891,7 +900,6 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
   };
 
   let currentDayCapacity = getRealDayCapacity(currentDate);
-  let hasBypassedToday = false;
 
   // Loop de redistribuição (Empuxo)
   for (const task of tasksToShift) {
@@ -933,11 +941,6 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
       let hasSimulado = newFutureSchedules.get(dStr)?.some(i => i.type?.toLowerCase() === 'simulado');
 
       while (currentDayCapacity <= 0 || hasSimulado) {
-        // Proteção de Capacidade: Se for hoje e houver metas atrasadas, permite alocar pelo menos uma
-        const isOverdue = overdueTasks.some(ot => (ot.id === task.id || ot.taskId === task.taskId || ot.metaId === task.metaId));
-        if (dStr === todayStr && isOverdue && !hasBypassedToday) {
-          break;
-        }
         currentDate.setDate(currentDate.getDate() + 1);
         currentDayCapacity = getRealDayCapacity(currentDate);
         dStr = getLocalISODate(currentDate);
@@ -959,13 +962,6 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
 
       let allocated = !isSplittableType ? remainingDuration : Math.min(remainingDuration, currentDayCapacity);
 
-      // Alocação Forçada Mínima: Se for hoje e atrasada, garante pelo menos 15 min para não travar
-      const isOverdue = overdueTasks.some(ot => (ot.id === task.id || ot.taskId === task.taskId || ot.metaId === task.metaId));
-      if (dStr === todayStr && isOverdue && !hasBypassedToday && allocated <= 0) {
-        allocated = Math.min(remainingDuration, 15);
-        hasBypassedToday = true;
-      }
-      
       // Motor de Fatiamento de Conteúdo
       const consumedVideos: any[] = [];
       let consumedFiles: any[] = [];
@@ -1015,7 +1011,7 @@ export const rescheduleOverdueTasks = async (userId: string, planId: string, rou
         (t.metaId && task.metaId && t.metaId === task.metaId) ||
         (t.taskId && task.taskId && t.taskId === task.taskId) ||
         (t.id && task.id && t.id === task.id) ||
-        (t.title === task.title && t.type?.toLowerCase() === task.type?.toLowerCase())
+        (t.title === task.title && t.type?.toLowerCase() === task.type?.toLowerCase() && t.order === task.order)
       );
 
       if (existingTask) {

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  ChevronRight, ChevronDown, CheckCircle2, PlayCircle, FileText, 
+  ChevronRight, ChevronDown, CheckCircle2, PlayCircle, FileText, FileQuestion,
   BrainCircuit, Layers, StickyNote, X, BookOpen, Loader2, CalendarClock
 } from 'lucide-react';
 import { useAuth } from '../../../../contexts/AuthContext';
@@ -411,21 +411,73 @@ function StudentTopicAccordion({ topic, courseId, disciplineId, disciplineName, 
                  </div>
               )}
 
-              {/* PDFs VINCULADOS */}
-              {topic.materialPdfs?.map((pdf: any, idx: number) => {
-                  const pdfId = pdf.id || `pdf-${idx}`;
+              {/* PDFs VINCULADOS - SEPARADOS POR TIPO */}
+              {(() => {
+                  const theoryPdfs = topic.materialPdfs?.filter((pdf: any) => (pdf.pdfType || 'TEORIA') === 'TEORIA') || [];
+                  const questionsPdfs = topic.materialPdfs?.filter((pdf: any) => pdf.pdfType === 'QUESTOES') || [];
+
                   return (
-                    <button key={pdfId} onClick={() => handleOpenPdf(pdf.url, pdfId)} className={`flex items-center gap-3 p-3 bg-[#1a1d24] border border-gray-800 rounded-lg transition-colors text-left group ${openingPdfId === pdfId ? 'opacity-70 cursor-not-allowed' : 'hover:border-blue-600/50'}`}>
-                        <div className="w-8 h-8 rounded-full bg-blue-900/20 text-blue-500 flex items-center justify-center group-hover:scale-110 transition-transform">
-                            {openingPdfId === pdfId ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div> : <FileText size={16} />}
+                    <>
+                      {/* MATERIAIS TEÓRICOS */}
+                      {theoryPdfs.length > 0 && (
+                        <div className="col-span-1 md:col-span-2 space-y-2 mt-2">
+                          <h4 className="text-[10px] font-bold text-yellow-500 uppercase tracking-wider flex items-center gap-2 mb-1">
+                            <BookOpen size={12} /> Materiais Teóricos
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {theoryPdfs.map((pdf: any, idx: number) => {
+                              const pdfId = pdf.id || `pdf-theory-${idx}`;
+                              return (
+                                <button 
+                                  key={pdfId} 
+                                  onClick={() => handleOpenPdf(pdf.url, pdfId)} 
+                                  className={`flex items-center gap-3 p-3 bg-[#1a1d24] border border-yellow-500/10 rounded-lg transition-all text-left group ${openingPdfId === pdfId ? 'opacity-70 cursor-not-allowed' : 'hover:border-yellow-500/50 hover:bg-yellow-500/5'}`}
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-yellow-900/20 text-yellow-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        {openingPdfId === pdfId ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-yellow-500 border-t-transparent"></div> : <FileText size={16} />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-[9px] text-gray-500 font-bold uppercase block mb-0.5">{openingPdfId === pdfId ? <span className="text-yellow-400 animate-pulse">Gerando Seguro...</span> : "Material de Teoria"}</span>
+                                        <span className="text-xs text-white font-bold block truncate">{pdf.title || `Teoria ${idx + 1}`}</span>
+                                    </div>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-0.5">{openingPdfId === pdfId ? <span className="text-blue-400 animate-pulse">Gerando Seguro...</span> : "Material em PDF"}</span>
-                            <span className="text-xs text-white font-bold block truncate">{pdf.title || `Material ${idx + 1}`}</span>
+                      )}
+
+                      {/* CADERNOS DE QUESTÕES */}
+                      {questionsPdfs.length > 0 && (
+                        <div className="col-span-1 md:col-span-2 space-y-2 mt-2">
+                          <h4 className="text-[10px] font-bold text-orange-500 uppercase tracking-wider flex items-center gap-2 mb-1">
+                            <FileQuestion size={12} /> Cadernos de Questões
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {questionsPdfs.map((pdf: any, idx: number) => {
+                              const pdfId = pdf.id || `pdf-quest-${idx}`;
+                              return (
+                                <button 
+                                  key={pdfId} 
+                                  onClick={() => handleOpenPdf(pdf.url, pdfId)} 
+                                  className={`flex items-center gap-3 p-3 bg-[#1a1d24] border border-orange-500/10 rounded-lg transition-all text-left group ${openingPdfId === pdfId ? 'opacity-70 cursor-not-allowed' : 'hover:border-orange-500/50 hover:bg-orange-500/5'}`}
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-orange-900/20 text-orange-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                        {openingPdfId === pdfId ? <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-500 border-t-transparent"></div> : <FileQuestion size={16} />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-[9px] text-gray-500 font-bold uppercase block mb-0.5">{openingPdfId === pdfId ? <span className="text-orange-400 animate-pulse">Gerando Seguro...</span> : "Caderno de Questões"}</span>
+                                        <span className="text-xs text-white font-bold block truncate">{pdf.title || `Questões ${idx + 1}`}</span>
+                                    </div>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                    </button>
+                      )}
+                    </>
                   );
-              })}
+              })()}
 
               {/* MAPAS MENTAIS */}
               <div className="col-span-1 md:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-[#1a1d24] border border-gray-800 rounded-lg gap-3 mt-2">

@@ -217,6 +217,7 @@ export const StudentLiveEventRoom: React.FC = () => {
                 thumbnailUrl={event.thumbnailUrl} 
                 eventDate={event.eventDate} 
                 startTime={event.startTime} 
+                timezoneLocation={event.timezoneLocation}
               />
             )}
             

@@ -35,6 +35,11 @@ const CalendarEventCard: React.FC<{ event: ScheduledEvent }> = ({ event }) => {
                         <span className="text-[9px] font-black text-yellow-500 uppercase tracking-wider bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20 inline-flex items-center gap-1">
                             <Trophy size={8} /> SIMULADO
                         </span>
+                        {event.cycleName && (
+                            <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded tracking-wider bg-zinc-800 text-zinc-500 border border-zinc-700">
+                                {event.cycleName}
+                            </span>
+                        )}
                     </div>
                     <h4 className="text-white font-bold text-xs leading-tight line-clamp-2 uppercase tracking-tight">
                         {event.title}
@@ -133,6 +138,12 @@ const CalendarEventCard: React.FC<{ event: ScheduledEvent }> = ({ event }) => {
                 {partInfo && (
                     <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded tracking-wider bg-white/10 text-white border border-white/20">
                         PT {partInfo}
+                    </span>
+                )}
+
+                {event.cycleName && (
+                    <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded tracking-wider bg-zinc-800 text-zinc-500 border border-zinc-700">
+                        {event.cycleName}
                     </span>
                 )}
 
@@ -480,11 +491,37 @@ const StudentCalendar: React.FC = () => {
                             >
                                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
                                     {dayEvents.length > 0 ? (
-                                        dayEvents.map(event => (
-                                            <div key={event.id} className="flex-shrink-0">
-                                                <CalendarEventCard event={event} />
-                                            </div>
-                                        ))
+                                        dayEvents.map((event, idx) => {
+                                            let showDivider = false;
+                                            if (idx > 0) {
+                                                showDivider = event.cycleName !== dayEvents[idx - 1].cycleName;
+                                            } else if (index > 0) {
+                                                // Check last event of previous day in the same week view
+                                                const prevDayKey = getISODate(weekDays[index - 1]);
+                                                const prevDayEvents = scheduleData[prevDayKey] || [];
+                                                if (prevDayEvents.length > 0) {
+                                                    const lastOfPrev = prevDayEvents[prevDayEvents.length - 1];
+                                                    showDivider = event.cycleName !== lastOfPrev.cycleName;
+                                                }
+                                            }
+
+                                            return (
+                                                <React.Fragment key={event.id}>
+                                                    {showDivider && event.cycleName && (
+                                                        <div className="w-full flex items-center gap-2 my-3">
+                                                            <div className="h-px bg-gray-700 flex-1"></div>
+                                                            <span className="text-[9px] font-orbitron text-gray-400 uppercase tracking-widest">
+                                                                INÍCIO {event.cycleName}
+                                                            </span>
+                                                            <div className="h-px bg-gray-700 flex-1"></div>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-shrink-0">
+                                                        <CalendarEventCard event={event} />
+                                                    </div>
+                                                </React.Fragment>
+                                            );
+                                        })
                                     ) : (
                                         <div className="h-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity min-h-[100px]">
                                             <span className="text-[9px] font-bold text-zinc-800 uppercase">Livre</span>
@@ -541,6 +578,26 @@ const StudentCalendar: React.FC = () => {
                                 </div>
 
                                 <div className="flex-1 flex flex-col gap-1 overflow-hidden mt-1">
+                                    {dayEvents.length > 0 && (() => {
+                                        let showMonthDivider = false;
+                                        if (index > 0) {
+                                            const prevDayKey = getISODate(monthDays[index - 1]);
+                                            const prevDayEvents = scheduleData[prevDayKey] || [];
+                                            if (prevDayEvents.length > 0) {
+                                                const lastOfPrev = prevDayEvents[prevDayEvents.length - 1];
+                                                showMonthDivider = dayEvents[0].cycleName !== lastOfPrev.cycleName;
+                                            }
+                                        }
+                                        
+                                        if (showMonthDivider && dayEvents[0].cycleName) {
+                                            return (
+                                                <div className="text-[7px] font-black text-yellow-500/70 uppercase truncate mb-0.5 border-b border-yellow-500/20 pb-0.5">
+                                                    {dayEvents[0].cycleName}
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
                                     {dayEvents.slice(0, 3).map(event => {
                                         // Visual diferenciado para simulado no mês (ponto amarelo)
                                         if (event.type === 'simulado') {

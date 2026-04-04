@@ -5,12 +5,14 @@ interface StudentLiveWaitingRoomProps {
   thumbnailUrl?: string;
   eventDate: string;
   startTime: string;
+  timezoneLocation?: string;
 }
 
 export const StudentLiveWaitingRoom: React.FC<StudentLiveWaitingRoomProps> = ({
   thumbnailUrl,
   eventDate,
-  startTime
+  startTime,
+  timezoneLocation
 }) => {
   return (
     <div className="relative w-full h-full bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center">
@@ -45,7 +47,7 @@ export const StudentLiveWaitingRoom: React.FC<StudentLiveWaitingRoomProps> = ({
           <div className="w-px h-3 md:h-6 bg-zinc-700"></div>
           <div className="flex items-center gap-1.5 md:gap-2 text-white">
             <Clock size={12} className="text-brand-red md:w-[18px] md:h-[18px]" />
-            <span className="text-[10px] md:text-base font-bold">{startTime}</span>
+            <span className="text-[10px] md:text-base font-bold">{startTime} {timezoneLocation ? `- ${timezoneLocation}` : ''}</span>
           </div>
         </div>
       </div>

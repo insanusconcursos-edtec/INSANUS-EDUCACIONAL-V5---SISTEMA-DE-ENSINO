@@ -114,7 +114,7 @@ export const AdminLiveEventDetails: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white uppercase tracking-tight">{event.title}</h1>
-            <p className="text-zinc-400 text-sm">{event.eventDate.split('-').reverse().join('/')} às {event.startTime}</p>
+            <p className="text-zinc-400 text-sm">{event.eventDate.split('-').reverse().join('/')} às {event.startTime} {event.timezoneLocation ? `- ${event.timezoneLocation}` : ''}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -209,7 +209,7 @@ export const AdminLiveEventDetails: React.FC = () => {
                   </div>
                   <div>
                     <span className="block text-xs text-zinc-500 uppercase font-bold mb-1">Horário</span>
-                    <p className="text-white">{event.startTime}</p>
+                    <p className="text-white">{event.startTime} {event.timezoneLocation ? `- ${event.timezoneLocation}` : ''}</p>
                   </div>
                 </div>
                 <div>

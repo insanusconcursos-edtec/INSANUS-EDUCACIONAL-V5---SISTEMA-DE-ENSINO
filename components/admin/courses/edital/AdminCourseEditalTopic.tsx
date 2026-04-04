@@ -38,6 +38,7 @@ export const AdminCourseEditalTopic: React.FC<Props> = ({
   const [isEditingName, setIsEditingName] = useState(false);
   const [localName, setLocalName] = useState(topic.name);
   const [isUploading, setIsUploading] = useState(false);
+  const [nextPdfType, setNextPdfType] = useState<'TEORIA' | 'QUESTOES'>('TEORIA');
 
   // Estados para Observação
   const [isEditingObservation, setIsEditingObservation] = useState(false);
@@ -142,7 +143,8 @@ export const AdminCourseEditalTopic: React.FC<Props> = ({
               const newPdf: MaterialPDF = {
                   title: file.name,
                   url: result.url,
-                  storagePath: result.path
+                  storagePath: result.path,
+                  pdfType: nextPdfType
               };
               const updatedPdfs = [...(topic.materialPdfs || []), newPdf];
               onUpdate({ ...topic, materialPdfs: updatedPdfs });
@@ -157,6 +159,13 @@ export const AdminCourseEditalTopic: React.FC<Props> = ({
 
   const handleRemovePDF = (url: string) => {
       const newPdfs = (topic.materialPdfs || []).filter(p => p.url !== url);
+      onUpdate({ ...topic, materialPdfs: newPdfs });
+  };
+
+  const handleUpdatePdfType = (url: string, type: 'TEORIA' | 'QUESTOES') => {
+      const newPdfs = (topic.materialPdfs || []).map(p => 
+          p.url === url ? { ...p, pdfType: type } : p
+      );
       onUpdate({ ...topic, materialPdfs: newPdfs });
   };
 
@@ -241,9 +250,21 @@ export const AdminCourseEditalTopic: React.FC<Props> = ({
                 <button onClick={() => setActiveTool('LESSON_LINK')} className="p-1.5 text-blue-500 hover:bg-blue-900/30 hover:text-blue-400" title="Vincular Aulas"><PlayCircle size={12} /></button>
                 <div className="w-px bg-zinc-800"></div>
                 
-                <button onClick={handleUploadPDFClick} disabled={isUploading} className="p-1.5 text-orange-500 hover:bg-orange-900/30 hover:text-orange-400 disabled:opacity-50" title="Upload PDF">
-                    {isUploading ? <span className="animate-spin text-[8px]">↻</span> : <FileText size={12} />}
-                </button>
+                <div className="flex items-center bg-zinc-950/50">
+                    <select 
+                        value={nextPdfType}
+                        onChange={(e) => setNextPdfType(e.target.value as any)}
+                        className="bg-transparent text-[8px] text-zinc-400 px-1 border-none focus:ring-0 cursor-pointer hover:text-white"
+                        title="Tipo do próximo PDF"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <option value="TEORIA">TEORIA</option>
+                        <option value="QUESTOES">QUESTÕES</option>
+                    </select>
+                    <button onClick={handleUploadPDFClick} disabled={isUploading} className="p-1.5 text-orange-500 hover:bg-orange-900/30 hover:text-orange-400 disabled:opacity-50" title="Upload PDF">
+                        {isUploading ? <span className="animate-spin text-[8px]">↻</span> : <FileText size={12} />}
+                    </button>
+                </div>
                 <input type="file" ref={fileInputRef} accept="application/pdf" className="hidden" onChange={handleFileChange} />
                 
                 <div className="w-px bg-zinc-800"></div>
@@ -314,13 +335,24 @@ export const AdminCourseEditalTopic: React.FC<Props> = ({
               {/* Lista de PDFs */}
               {topic.materialPdfs && topic.materialPdfs.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-1">
-                      {topic.materialPdfs.map((pdf, idx) => (
-                          <div key={idx} className="flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/20 px-2 py-1 rounded text-[10px] text-orange-300 group/item hover:border-orange-500/40">
-                              <FileText size={10} />
-                              <span className="truncate max-w-[150px]">{pdf.title}</span>
-                              <button onClick={() => handleRemovePDF(pdf.url)} className="hover:text-red-400 opacity-0 group-hover/item:opacity-100 transition-opacity ml-1"><X size={10} /></button>
-                          </div>
-                      ))}
+                      {topic.materialPdfs.map((pdf, idx) => {
+                          const isTheory = (pdf.pdfType || 'TEORIA') === 'TEORIA';
+                          return (
+                            <div key={idx} className={`flex items-center gap-1.5 ${isTheory ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300' : 'bg-orange-500/10 border-orange-500/20 text-orange-300'} border px-2 py-1 rounded text-[10px] group/item hover:border-opacity-50`}>
+                                <FileText size={10} />
+                                <span className="truncate max-w-[120px]">{pdf.title}</span>
+                                <select 
+                                    value={pdf.pdfType || 'TEORIA'}
+                                    onChange={(e) => handleUpdatePdfType(pdf.url, e.target.value as any)}
+                                    className="bg-transparent border-none text-[8px] p-0 focus:ring-0 cursor-pointer opacity-60 hover:opacity-100"
+                                >
+                                    <option value="TEORIA">T</option>
+                                    <option value="QUESTOES">Q</option>
+                                </select>
+                                <button onClick={() => handleRemovePDF(pdf.url)} className="hover:text-red-400 opacity-0 group-hover/item:opacity-100 transition-opacity ml-1"><X size={10} /></button>
+                            </div>
+                          );
+                      })}
                   </div>
               )}
 

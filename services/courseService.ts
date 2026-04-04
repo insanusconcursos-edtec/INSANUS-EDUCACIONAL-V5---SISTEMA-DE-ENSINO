@@ -1,5 +1,6 @@
 
 import { db, storage } from './firebase';
+import { sanitizeData } from './firestoreUtils';
 import { 
   collection, 
   addDoc, 
@@ -30,13 +31,6 @@ const SUBMODULES_COLLECTION = 'course_submodules';
 const LESSONS_COLLECTION = 'course_lessons';
 const CONTENTS_COLLECTION = 'course_contents';
 const EDITAL_COLLECTION = 'course_edital'; 
-
-// Helper para remover campos undefined antes de salvar no Firestore (recursivo)
-const sanitizeData = (data: any) => {
-  return JSON.parse(JSON.stringify(data, (key, value) => {
-    return value === undefined ? null : value;
-  }));
-};
 
 export const courseService = {
   // Helper para upload de Banner
@@ -221,8 +215,8 @@ export const courseService = {
         console.log(`[DUPLICATE] Edital encontrado, processando...`);
         const newEditalRef = doc(db, EDITAL_COLLECTION, newCourseRef.id);
         
-        // Clonagem profunda do edital para manipular referências
-        const newEditalData: CourseEditalStructure = JSON.parse(JSON.stringify(edital));
+        // Clonagem profunda do edital para manipular referências (usando sanitizeData para ser seguro)
+        const newEditalData: CourseEditalStructure = sanitizeData(edital);
         newEditalData.courseId = newCourseRef.id;
         newEditalData.updatedAt = serverTimestamp();
 
@@ -769,8 +763,8 @@ export const courseService = {
       const docRef = doc(db, EDITAL_COLLECTION, data.courseId);
       
       // SANITIZAÇÃO: Remove campos 'undefined' que quebram o Firestore
-      // JSON.stringify ignora chaves com valor undefined
-      const sanitizedData = JSON.parse(JSON.stringify(data));
+      // Usamos sanitizeData em vez de JSON.stringify para evitar erros de estrutura circular
+      const sanitizedData = sanitizeData(data);
 
       await setDoc(docRef, {
         ...sanitizedData,

@@ -18,6 +18,7 @@ export const LiveEventFormModal: React.FC<LiveEventFormModalProps> = ({ isOpen, 
   const [subtitle, setSubtitle] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [startTime, setStartTime] = useState('');
+  const [timezoneLocation, setTimezoneLocation] = useState('Brasília/DF');
   const [isIsolatedProduct, setIsIsolatedProduct] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
@@ -89,6 +90,7 @@ export const LiveEventFormModal: React.FC<LiveEventFormModalProps> = ({ isOpen, 
         setSubtitle(initialData.subtitle || '');
         setEventDate(initialData.eventDate);
         setStartTime(initialData.startTime);
+        setTimezoneLocation(initialData.timezoneLocation || 'Brasília/DF');
         setIsIsolatedProduct(initialData.isIsolatedProduct);
         setAccessControl(initialData.accessControl);
         setThumbnailPreview(initialData.thumbnailUrl || '');
@@ -120,6 +122,7 @@ export const LiveEventFormModal: React.FC<LiveEventFormModalProps> = ({ isOpen, 
     setSubtitle('');
     setEventDate('');
     setStartTime('');
+    setTimezoneLocation('Brasília/DF');
     setIsIsolatedProduct(false);
     setThumbnailFile(null);
     setThumbnailPreview('');
@@ -160,6 +163,7 @@ export const LiveEventFormModal: React.FC<LiveEventFormModalProps> = ({ isOpen, 
         subtitle,
         eventDate,
         startTime,
+        timezoneLocation,
         isIsolatedProduct,
         accessControl,
         status: initialData?.status || 'scheduled',
@@ -241,6 +245,20 @@ export const LiveEventFormModal: React.FC<LiveEventFormModalProps> = ({ isOpen, 
                     onChange={(e) => setStartTime(e.target.value)}
                     className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-red-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">Fuso Horário de Referência *</label>
+                  <select
+                    required
+                    value={timezoneLocation}
+                    onChange={(e) => setTimezoneLocation(e.target.value)}
+                    className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-red-500"
+                  >
+                    <option value="Brasília/DF">Brasília/DF (Horário Padrão)</option>
+                    <option value="Porto Velho/RO">Porto Velho/RO</option>
+                    <option value="Rio Branco/AC">Rio Branco/AC</option>
+                  </select>
                 </div>
               </div>
             </div>

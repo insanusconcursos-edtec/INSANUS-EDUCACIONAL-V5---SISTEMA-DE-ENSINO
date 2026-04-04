@@ -73,7 +73,7 @@ export const LiveEventCard: React.FC<LiveEventCardProps> = ({ event, onEdit, onD
           </div>
           <div className="flex items-center justify-between">
             <span>Horário:</span>
-            <span className="font-medium text-white">{event.startTime}</span>
+            <span className="font-medium text-white">{event.startTime} {event.timezoneLocation ? `- ${event.timezoneLocation}` : ''}</span>
           </div>
         </div>
       </div>

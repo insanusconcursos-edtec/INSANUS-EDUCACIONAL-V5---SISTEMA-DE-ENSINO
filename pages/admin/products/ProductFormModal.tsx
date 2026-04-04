@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle, Upload, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { X, Save, AlertCircle, Upload, ChevronDown, ChevronUp, Search, Video } from 'lucide-react';
 import { TictoProduct, ProductType } from '../../../types/product';
 import { createProduct, updateProduct, uploadProductCover } from '../../../services/productService';
 import { getPlans } from '../../../services/planService';
 import { courseService } from '../../../services/courseService';
 import { getSimulatedClasses } from '../../../services/simulatedService';
 import { classService } from '../../../services/classService';
+import { liveEventService } from '../../../services/liveEventService';
 
 interface ProductFormModalProps {
   product: TictoProduct | null;
@@ -24,34 +25,38 @@ export default function ProductFormModal({ product, onClose, onSave }: ProductFo
   const [accessDays, setAccessDays] = useState(product?.accessDays || 365);
   const [coverUrl, setCoverUrl] = useState(product?.coverUrl || '');
   const [isUploading, setIsUploading] = useState(false);
-  const [searchTerms, setSearchTerms] = useState({ plans: '', courses: '', classes: '', simulated: '' });
-  const [expanded, setExpanded] = useState({ plans: false, courses: false, classes: false, simulated: false });
+  const [searchTerms, setSearchTerms] = useState({ plans: '', courses: '', classes: '', simulated: '', liveEvents: '' });
+  const [expanded, setExpanded] = useState({ plans: false, courses: false, classes: false, simulated: false, liveEvents: false });
 
   // Linked Resources State
   const [linkedPlans, setLinkedPlans] = useState<string[]>(product?.linkedResources.plans || []);
   const [linkedCourses, setLinkedCourses] = useState<string[]>(product?.linkedResources.onlineCourses || []);
   const [linkedClasses, setLinkedClasses] = useState<string[]>(product?.linkedResources.presentialClasses || []);
   const [linkedSimulated, setLinkedSimulated] = useState<string[]>(product?.linkedResources.simulated || []);
+  const [linkedLiveEvents, setLinkedLiveEvents] = useState<string[]>(product?.linkedResources.liveEvents || product?.liveEventIds || []);
 
   // Available Resources State
   const [availablePlans, setAvailablePlans] = useState<any[]>([]);
   const [availableCourses, setAvailableCourses] = useState<any[]>([]);
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
   const [availableSimulated, setAvailableSimulated] = useState<any[]>([]);
+  const [availableLiveEvents, setAvailableLiveEvents] = useState<any[]>([]);
 
   useEffect(() => {
     const loadResources = async () => {
       try {
-        const [plans, courses, classes, simulated] = await Promise.all([
+        const [plans, courses, classes, simulated, liveEvents] = await Promise.all([
           getPlans(),
           courseService.getCourses(),
           classService.getClasses(),
-          getSimulatedClasses()
+          getSimulatedClasses(),
+          liveEventService.getLiveEvents()
         ]);
         setAvailablePlans(plans);
         setAvailableCourses(courses);
         setAvailableClasses(classes);
         setAvailableSimulated(simulated);
+        setAvailableLiveEvents(liveEvents);
       } catch (err) {
         console.error('Failed to load resources:', err);
         setError('Erro ao carregar recursos disponíveis.');
@@ -80,8 +85,10 @@ export default function ProductFormModal({ product, onClose, onSave }: ProductFo
         plans: linkedPlans,
         onlineCourses: linkedCourses,
         presentialClasses: linkedClasses,
-        simulated: linkedSimulated
-      }
+        simulated: linkedSimulated,
+        liveEvents: linkedLiveEvents
+      },
+      liveEventIds: linkedLiveEvents
     };
 
     try {
@@ -100,7 +107,7 @@ export default function ProductFormModal({ product, onClose, onSave }: ProductFo
     }
   };
 
-  const productTypes: ProductType[] = ['COMBO', 'PLANO', 'TURMA_ONLINE', 'CURSO_ISOLADO', 'SIMULADO'];
+  const productTypes: ProductType[] = ['COMBO', 'PLANO', 'TURMA_ONLINE', 'CURSO_ISOLADO', 'SIMULADO', 'EVENTO'];
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -460,6 +467,68 @@ export default function ProductFormModal({ product, onClose, onSave }: ProductFo
                         })}
                         {linkedSimulated.length === 0 && (
                           <p className="text-center py-4 text-zinc-600 text-[10px] uppercase font-bold">Nenhum simulado selecionado</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Live Events */}
+                <div className="border border-gray-800 rounded-lg bg-gray-900/50 overflow-hidden mb-3">
+                  <button type="button" onClick={() => setExpanded(prev => ({ ...prev, liveEvents: !prev.liveEvents }))} className="w-full flex items-center justify-between p-3 bg-gray-900 hover:bg-gray-800 transition text-sm font-bold text-gray-300">
+                    <span>Eventos ao Vivo ({linkedLiveEvents.length})</span>
+                    {expanded.liveEvents ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+                  {expanded.liveEvents && (
+                    <div className="p-3 flex flex-col gap-3 border-t border-gray-800">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                        <select
+                          className="w-full bg-gray-950 border border-gray-800 rounded pl-8 pr-3 py-1.5 text-white text-xs focus:border-red-500 outline-none appearance-none cursor-pointer"
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            if (id && !linkedLiveEvents.includes(id)) {
+                              setLinkedLiveEvents([...linkedLiveEvents, id]);
+                            }
+                            e.target.value = "";
+                          }}
+                          value=""
+                        >
+                          <option value="">Adicionar evento...</option>
+                          {availableLiveEvents
+                            .filter(e => !linkedLiveEvents.includes(e.id))
+                            .filter(e => (e.title || '').toLowerCase().includes(searchTerms.liveEvents))
+                            .map(event => (
+                              <option key={event.id} value={event.id}>
+                                {event.title}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        {linkedLiveEvents.map((id, index) => {
+                          const event = availableLiveEvents.find(e => e.id === id);
+                          return (
+                            <div key={id} className="flex items-center justify-between bg-gray-950 p-2 rounded border border-gray-800 group">
+                              <div className="flex items-center gap-3">
+                                <span className="text-[10px] font-bold text-zinc-600 w-4">{index + 1}.</span>
+                                <span className="text-xs text-gray-300 truncate">
+                                  {event?.title || 'Evento removido'}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setLinkedLiveEvents(linkedLiveEvents.filter(lId => lId !== id))}
+                                className="p-1 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 rounded transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {linkedLiveEvents.length === 0 && (
+                          <p className="text-center py-4 text-zinc-600 text-[10px] uppercase font-bold">Nenhum evento selecionado</p>
                         )}
                       </div>
                     </div>

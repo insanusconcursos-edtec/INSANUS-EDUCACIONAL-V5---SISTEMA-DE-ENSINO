@@ -22,6 +22,7 @@ import {
   toggleActiveUserMode, // Importado
   EdictStructure
 } from '../../../services/edictService';
+import { deepCloneSafe } from '../../../services/firestoreUtils';
 import { getMetas, Meta, MetaType } from '../../../services/metaService';
 import { getDisciplines, getTopics, Discipline, Topic } from '../../../services/structureService';
 import { usePlanSync } from '../../../hooks/usePlanSync'; // Hook de Sync
@@ -330,7 +331,7 @@ const VerticalEdictManager: React.FC<VerticalEdictManagerProps> = ({ plan, onUpd
       await renameEdictItem(plan.id, type, ids, newName);
       // Otimista
       if (structure) {
-        const newStructure = JSON.parse(JSON.stringify(structure)) as EdictStructure;
+        const newStructure = deepCloneSafe(structure);
         const disc = newStructure.disciplines.find(d => d.id === ids.disciplineId);
         if (disc) {
           if (type === 'discipline') {
@@ -359,7 +360,7 @@ const VerticalEdictManager: React.FC<VerticalEdictManagerProps> = ({ plan, onUpd
       await updateEdictItem(plan.id, type, ids, { observation: newObservation });
       // Otimista
       if (structure) {
-        const newStructure = JSON.parse(JSON.stringify(structure)) as EdictStructure;
+        const newStructure = deepCloneSafe(structure);
         const disc = newStructure.disciplines.find(d => d.id === ids.disciplineId);
         if (disc) {
           if (type === 'topic' && ids.topicId) {
@@ -389,7 +390,7 @@ const VerticalEdictManager: React.FC<VerticalEdictManagerProps> = ({ plan, onUpd
   ) => {
     if (!structure || !plan.id) return;
 
-    const newStructure = JSON.parse(JSON.stringify(structure)) as EdictStructure;
+    const newStructure = deepCloneSafe(structure);
     let itemsArray: any[] = [];
 
     if (type === 'discipline') {

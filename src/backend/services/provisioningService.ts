@@ -34,6 +34,7 @@ interface UserAccess {
     onlineCourses?: string[];
     presentialClasses?: string[];
     simulated?: string[];
+    liveEvents?: string[];
   };
   orderIndex?: number;
   revokedAt?: Date;
@@ -79,15 +80,28 @@ export const provisionTictoPurchase = async (customerData: CustomerData, tictoPr
         onlineCourses?: string[];
         presentialClasses?: string[];
         simulated?: string[];
-      } 
+        liveEvents?: string[];
+      };
+      liveEventIds?: string[];
     };
     const accessDays = productData.accessDays || 365;
     const linkedResources = productData.linkedResources || {
       plans: [],
       onlineCourses: [],
       presentialClasses: [],
-      simulated: []
+      simulated: [],
+      liveEvents: []
     };
+    
+    // Merge liveEventIds if present at root
+    if (productData.liveEventIds && Array.isArray(productData.liveEventIds)) {
+      if (!linkedResources.liveEvents) linkedResources.liveEvents = [];
+      productData.liveEventIds.forEach(id => {
+        if (!linkedResources.liveEvents!.includes(id)) {
+          linkedResources.liveEvents!.push(id);
+        }
+      });
+    }
 
     // Calcular data de expiração
     const expirationDate = new Date();
@@ -120,6 +134,7 @@ export const provisionTictoPurchase = async (customerData: CustomerData, tictoPr
       if (linkedResources.onlineCourses) linkedResources.onlineCourses.forEach((id: string) => resourcesArray.push({ id, type: 'course' }));
       if (linkedResources.simulated) linkedResources.simulated.forEach((id: string) => resourcesArray.push({ id, type: 'simulated_class' }));
       if (linkedResources.presentialClasses) linkedResources.presentialClasses.forEach((id: string) => resourcesArray.push({ id, type: 'presential_class' }));
+      if (linkedResources.liveEvents) linkedResources.liveEvents.forEach((id: string) => resourcesArray.push({ id, type: 'live_event' }));
     }
 
     for (let index = 0; index < resourcesArray.length; index++) {
@@ -136,6 +151,7 @@ export const provisionTictoPurchase = async (customerData: CustomerData, tictoPr
         case 'plan': collectionName = 'plans'; break;
         case 'simulated_class': collectionName = 'simulatedClasses'; break;
         case 'presential_class': collectionName = 'classes'; break;
+        case 'live_event': collectionName = 'live_events'; break;
       }
 
       if (collectionName && res.id) {

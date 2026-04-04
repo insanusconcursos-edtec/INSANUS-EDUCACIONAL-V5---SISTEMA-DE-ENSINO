@@ -11,6 +11,7 @@ export interface MaterialPDF {
   title: string;
   url: string;
   storagePath?: string; // Para facilitar exclusão futura
+  pdfType?: 'TEORIA' | 'QUESTOES';
 }
 
 export interface CourseEditalTopic {

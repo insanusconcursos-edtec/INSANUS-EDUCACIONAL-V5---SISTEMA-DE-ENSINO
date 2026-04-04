@@ -56,7 +56,7 @@ export const StudentLiveEvents: React.FC = () => {
             if (item.type === 'course') courses.push(item.targetId);
             if (item.type === 'presential_class') classes.push(item.targetId);
             if (item.type === 'simulated_class') simulated.push(item.targetId);
-            if (item.type === 'isolated_product') isolatedProducts.push(item.targetId);
+            if (item.type === 'isolated_product' || item.type === 'live_event') isolatedProducts.push(item.targetId);
           });
         }
 
@@ -217,7 +217,7 @@ export const StudentLiveEvents: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2 text-zinc-300 text-sm">
                       <Clock size={16} className="text-zinc-500" />
-                      <span>{event.startTime}</span>
+                      <span>{event.startTime} {event.timezoneLocation ? `- ${event.timezoneLocation}` : ''}</span>
                     </div>
                   </div>
 

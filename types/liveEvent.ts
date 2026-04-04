@@ -78,6 +78,7 @@ export interface LiveEvent {
   isIsolatedProduct: boolean;
   accessControl: LiveEventAccessControl;
   status: 'scheduled' | 'live' | 'ended';
+  timezoneLocation?: string;
   materials?: LiveEventMaterial[];
   recordings?: LiveEventRecording[]; // Para produtos isolados
   createdAt?: Timestamp | any;

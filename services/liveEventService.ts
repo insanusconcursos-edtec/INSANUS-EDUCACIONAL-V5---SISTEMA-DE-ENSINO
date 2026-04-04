@@ -10,11 +10,15 @@ export const liveEventService = {
     try {
       const q = query(
         collection(db, COLLECTION_NAME),
-        where("accessControl.presentialClasses", "array-contains", classId),
         where("status", "!=", "ended")
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveEvent));
+      const allActiveEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveEvent));
+      
+      // Filter by presential class access
+      return allActiveEvents.filter(event => 
+        event.accessControl?.presentialClasses?.includes(classId)
+      );
     } catch (error) {
       console.error("Error fetching live events by class:", error);
       return [];
@@ -25,11 +29,15 @@ export const liveEventService = {
     try {
       const q = query(
         collection(db, COLLECTION_NAME),
-        where("accessControl.onlineCourses", "array-contains", courseId),
         where("status", "!=", "ended")
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveEvent));
+      const allActiveEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LiveEvent));
+      
+      // Filter by online course access
+      return allActiveEvents.filter(event => 
+        event.accessControl?.onlineCourses?.includes(courseId)
+      );
     } catch (error) {
       console.error("Error fetching live events by course:", error);
       return [];

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Edit3, Loader2, Clock } from 'lucide-react';
 import { Meta, uploadBatchMetaFiles, MaterialLink, MaterialFile, SpacedReviewConfig, MindMapNode } from '../../../../services/metaService';
+import { sanitizeData } from '../../../../services/firestoreUtils';
 import MetaLinksEditor from '../shared/MetaLinksEditor';
 import MetaFilesUploader, { FileItem } from '../shared/MetaFilesUploader';
 import ReviewSystemConfig from '../shared/ReviewSystemConfig';
@@ -94,10 +95,9 @@ const SummaryForm: React.FC<SummaryFormProps> = ({ isOpen, onClose, onSave, init
       const processedFiles = await uploadBatchMetaFiles(planId, files);
 
       // SANITIZAÇÃO DE DADOS (Remove undefined)
-      // Firestore rejeita campos 'undefined', então usamos JSON.parse(JSON.stringify(...)) para removê-los recursivamente
-      // Isso é crucial para o MindMap que pode ter propriedades opcionais
-      const cleanMindMap = mindMap && mindMap.length > 0 ? JSON.parse(JSON.stringify(mindMap)) : [];
-      const cleanReviewConfig = reviewConfig ? JSON.parse(JSON.stringify(reviewConfig)) : null;
+      // Usamos sanitizeData para evitar erros de estrutura circular e remover undefined
+      const cleanMindMap = mindMap && mindMap.length > 0 ? sanitizeData(mindMap) : [];
+      const cleanReviewConfig = reviewConfig ? sanitizeData(reviewConfig) : null;
 
       await onSave({
         title,

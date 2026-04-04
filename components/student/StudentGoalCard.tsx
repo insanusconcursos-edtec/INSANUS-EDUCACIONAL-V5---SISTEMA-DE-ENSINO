@@ -68,6 +68,9 @@ export interface StudentGoal {
   pdfUrl?: string;
   arquivoProvaUrl?: string;
   bookletUrl?: string;
+
+  // Cycle Identification
+  cycleName?: string;
 }
 
 interface StudentGoalCardProps {
@@ -437,6 +440,12 @@ export const StudentGoalCard: React.FC<StudentGoalCardProps> = ({ goal, onStart,
                             <span className="bg-gray-800 text-gray-400 text-[10px] px-2 py-0.5 rounded border border-gray-700 font-mono">
                                 ID: {goal.metaId?.slice(0,6) || goal.id?.slice(0,6)}
                             </span>
+                            {goal.cycleName && (
+                                <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider flex items-center">
+                                    <span className="mx-1.5 opacity-30">•</span>
+                                    {goal.cycleName}
+                                </span>
+                            )}
                         </div>
                         
                         <h3 className={`font-bold text-xl md:text-2xl leading-tight break-words ${isCompleted ? 'text-gray-500 line-through decoration-gray-600' : 'text-white'}`}>
@@ -557,6 +566,13 @@ export const StudentGoalCard: React.FC<StudentGoalCardProps> = ({ goal, onStart,
           >
             {defaultConfig.label}
           </span>
+
+          {goal.cycleName && (
+            <span className="text-[10px] uppercase font-bold text-gray-500 tracking-wider flex items-center">
+              <span className="mx-1.5 opacity-30">•</span>
+              {goal.cycleName}
+            </span>
+          )}
 
           {goal.part !== null && goal.part !== undefined && goal.part > 0 && !isMerged && (
             <span 

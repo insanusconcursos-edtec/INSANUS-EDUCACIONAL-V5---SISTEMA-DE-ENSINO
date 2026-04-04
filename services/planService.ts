@@ -15,29 +15,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
-
-const cleanObject = (obj: any): any => {
-  if (obj === null || typeof obj !== 'object') return obj;
-  
-  if (Array.isArray(obj)) {
-    return obj
-      .filter(item => item !== undefined)
-      .map(cleanObject);
-  }
-
-  // Se não for um objeto simples (ex: Timestamp, FieldValue, Date), retorna como está
-  if (Object.prototype.toString.call(obj) !== '[object Object]') {
-    return obj;
-  }
-  
-  const newObj: any = {};
-  Object.keys(obj).forEach(key => {
-    if (obj[key] !== undefined) {
-      newObj[key] = cleanObject(obj[key]);
-    }
-  });
-  return newObj;
-};
+import { sanitizeData as cleanObject } from './firestoreUtils';
 
 // Interfaces
 export interface Folder {
@@ -347,8 +325,8 @@ export const duplicatePlan = async (originalPlanId: string) => {
       });
     };
 
-    // Deep clone to avoid mutating original data (though we are reading from snap data which is fresh)
-    const newEdictData = JSON.parse(JSON.stringify(oldEdictData));
+    // Deep clone to avoid mutating original data (using cleanObject to be safe with Firestore objects)
+    const newEdictData = cleanObject(oldEdictData);
 
     // Traverse Structure
     if (newEdictData.disciplines) {

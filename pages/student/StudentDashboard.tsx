@@ -90,6 +90,7 @@ const StudentDashboard: React.FC = () => {
             part: event.part, // Map Part Number
             order: event.order, // Map Order Number
             smartExtension: event.smartExtension || null, // Map the extension config
+            cycleName: event.cycleName, // Map Cycle Name
             
             // Review Specifics
             reviewLabel: event.reviewLabel,
