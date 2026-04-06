@@ -3,6 +3,9 @@ import { Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
 
 interface Props {
   videoId: string;
+  hideControls?: boolean;
+  preventSharing?: boolean;
+  customMask?: boolean;
 }
 
 declare global {
@@ -49,7 +52,12 @@ interface YTPlayerOptions {
   };
 }
 
-export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
+export const AlternativeYouTubePlayer: React.FC<Props> = ({ 
+  videoId, 
+  hideControls = true, 
+  preventSharing = true, 
+  customMask = true 
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null); // Container que o React gerencia
   const playerRef = useRef<YTPlayer | null>(null);
@@ -109,7 +117,7 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
         videoId,
         host: 'https://www.youtube.com',
         playerVars: {
-          controls: 0,
+          controls: hideControls ? 0 : 1,
           disablekb: 1,
           modestbranding: 1,
           rel: 0,
@@ -282,7 +290,7 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
     <div 
       ref={containerRef} 
       className="relative w-full h-full bg-black rounded-lg overflow-hidden group"
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => preventSharing ? e.preventDefault() : null}
     >
       
       {/* O Iframe do YouTube Isolado e Protegido */}
@@ -299,19 +307,19 @@ export const AlternativeYouTubePlayer: React.FC<Props> = ({ videoId }) => {
       </div>
 
       {/* Escudos parciais ativos ANTES do vídeo começar */}
-      {!hasStarted && (
+      {customMask && !hasStarted && (
         <>
           {/* Escudo Topo (Cobre a metade de cima, até o limite superior do botão play) */}
-          <div className="absolute top-0 left-0 w-full h-[calc(50%-24px)] z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+          <div className="absolute top-0 left-0 w-full h-[calc(50%-24px)] z-10 bg-transparent" onContextMenu={(e) => preventSharing ? e.preventDefault() : null} />
           
           {/* Escudo Base (Cobre a metade de baixo, até o limite inferior do botão play) */}
-          <div className="absolute bottom-0 left-0 w-full h-[calc(50%-24px)] z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+          <div className="absolute bottom-0 left-0 w-full h-[calc(50%-24px)] z-10 bg-transparent" onContextMenu={(e) => preventSharing ? e.preventDefault() : null} />
           
           {/* Escudo Esquerdo (Cobre a lateral esquerda, alinhado com a altura do botão play) */}
-          <div className="absolute top-[calc(50%-24px)] left-0 w-[calc(50%-34px)] h-[48px] z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+          <div className="absolute top-[calc(50%-24px)] left-0 w-[calc(50%-34px)] h-[48px] z-10 bg-transparent" onContextMenu={(e) => preventSharing ? e.preventDefault() : null} />
           
           {/* Escudo Direito (Cobre a lateral direita, alinhado com a altura do botão play) */}
-          <div className="absolute top-[calc(50%-24px)] right-0 w-[calc(50%-34px)] h-[48px] z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+          <div className="absolute top-[calc(50%-24px)] right-0 w-[calc(50%-34px)] h-[48px] z-10 bg-transparent" onContextMenu={(e) => preventSharing ? e.preventDefault() : null} />
         </>
       )}
 

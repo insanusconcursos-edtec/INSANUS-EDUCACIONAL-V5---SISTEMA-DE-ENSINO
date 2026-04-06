@@ -83,17 +83,15 @@ export const StudentLiveEvents: React.FC = () => {
       
       // 3. Filter events based on access rules
       const allowedEvents = allEvents.filter(event => {
-        const isIsolatedForUser = event.isIsolatedProduct && isolatedProducts.includes(event.id);
+        const userHasAccess = hasAccess(event, { plans, courses, classes, simulated, isolatedProducts });
 
-        // NOVA REGRA: Se o evento está encerrado, SÓ aparece se o usuário tiver como produto isolado
-        if (event.status === 'ended' && !isIsolatedForUser) {
-          return false;
+        // Se o evento está encerrado, só aparece se o usuário tiver acesso (via qualquer método)
+        if (event.status === 'ended') {
+          return userHasAccess;
         }
 
-        if (event.isPublic) return true;
-        if (isIsolatedForUser) return true;
-        
-        return hasAccess(event, { plans, courses, classes, simulated, isolatedProducts });
+        // Para eventos futuros ou ao vivo, mostramos se o usuário tiver acesso (ou for público)
+        return userHasAccess;
       });
       setEvents(allowedEvents);
     } catch (error) {
@@ -224,13 +222,15 @@ export const StudentLiveEvents: React.FC = () => {
                   {userHasAccess && (
                     <button
                       onClick={() => navigate(`/app/eventos-ao-vivo/sala/${event.id}`)}
-                      disabled={event.status === 'ended'}
+                      disabled={event.status === 'ended' && (!event.recordings || event.recordings.length === 0)}
                       className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
                         event.status === 'live' 
                           ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-900/20' 
                           : event.status === 'scheduled'
                             ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
-                            : 'bg-zinc-800/50 text-zinc-500 cursor-not-allowed'
+                            : (event.recordings && event.recordings.length > 0)
+                              ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-900/20'
+                              : 'bg-zinc-800/50 text-zinc-500 cursor-not-allowed'
                       }`}
                     >
                       {event.status === 'live' ? (
@@ -240,6 +240,11 @@ export const StudentLiveEvents: React.FC = () => {
                         </>
                       ) : event.status === 'scheduled' ? (
                         'AGUARDANDO INÍCIO'
+                      ) : (event.recordings && event.recordings.length > 0) ? (
+                        <>
+                          <Play size={18} fill="currentColor" />
+                          ASSISTIR GRAVAÇÃO
+                        </>
                       ) : (
                         'EVENTO ENCERRADO'
                       )}

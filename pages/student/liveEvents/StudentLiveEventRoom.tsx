@@ -19,7 +19,13 @@ export const StudentLiveEventRoom: React.FC = () => {
   
   const [event, setEvent] = useState<LiveEvent | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userIsolatedProducts, setUserIsolatedProducts] = useState<string[]>([]);
+  const [userAccess, setUserAccess] = useState<{
+    plans: string[];
+    courses: string[];
+    classes: string[];
+    simulated: string[];
+    isolatedProducts: string[];
+  }>({ plans: [], courses: [], classes: [], simulated: [], isolatedProducts: [] });
   const [viewerCount, setViewerCount] = useState(0);
   const [isChatBlocked, setIsChatBlocked] = useState(false);
 
@@ -98,14 +104,64 @@ export const StudentLiveEventRoom: React.FC = () => {
       const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        const isolated = userData?.access
-          ?.filter((item: any) => item.type === 'isolated_product' && item.isActive)
-          .map((item: any) => item.targetId) || [];
-        setUserIsolatedProducts(isolated);
+        
+        const plans: string[] = [];
+        const courses: string[] = [];
+        const classes: string[] = [];
+        const simulated: string[] = [];
+        const isolatedProducts: string[] = [];
+
+        if (userData?.access) {
+          userData.access.forEach((item: any) => {
+            if (!item.isActive) return;
+            const now = new Date();
+            const endDate = item.endDate?.toDate ? item.endDate.toDate() : new Date(item.endDate);
+            if (endDate < now) return;
+
+            if (item.type === 'plan') plans.push(item.targetId);
+            if (item.type === 'course') courses.push(item.targetId);
+            if (item.type === 'presential_class') classes.push(item.targetId);
+            if (item.type === 'simulated_class') simulated.push(item.targetId);
+            if (item.type === 'isolated_product' || item.type === 'live_event') isolatedProducts.push(item.targetId);
+          });
+        }
+
+        // Legacy courses
+        if (userData?.courses) {
+          userData.courses.forEach((c: any) => {
+            if (c.active) {
+              if (c.expiresAt && new Date(c.expiresAt) < new Date()) return;
+              if (!courses.includes(c.courseId)) courses.push(c.courseId);
+            }
+          });
+        }
+
+        setUserAccess({ plans, courses, classes, simulated, isolatedProducts });
       }
     };
     loadUserAccess();
   }, [currentUser]);
+
+  const hasAccess = () => {
+    if (!event) return false;
+    if (event.isPublic) return true;
+    
+    const isIsolatedForUser = event.isIsolatedProduct && userAccess.isolatedProducts.includes(event.id!);
+    if (isIsolatedForUser) return true;
+
+    const { plans, onlineCourses, presentialClasses, simulated } = event.accessControl;
+    
+    if (plans.length === 0 && onlineCourses.length === 0 && presentialClasses.length === 0 && simulated.length === 0) {
+      return true;
+    }
+
+    const hasPlanAccess = plans.some(id => userAccess.plans.includes(id));
+    const hasCourseAccess = onlineCourses.some(id => userAccess.courses.includes(id));
+    const hasClassAccess = presentialClasses.some(id => userAccess.classes.includes(id));
+    const hasSimulatedAccess = simulated.some(id => userAccess.simulated.includes(id));
+
+    return hasPlanAccess || hasCourseAccess || hasClassAccess || hasSimulatedAccess;
+  };
 
   useEffect(() => {
     if (!eventId || !currentUser) return;
@@ -151,11 +207,18 @@ export const StudentLiveEventRoom: React.FC = () => {
   }
 
   if (event.status === 'ended') {
-    // Se o usuário possui como produto isolado, mostra a Gravação
-    if (event.isIsolatedProduct && userIsolatedProducts.includes(event.id)) {
+    // Se o usuário possui acesso, mostra a Gravação
+    if (hasAccess()) {
       return (
-         <div className="max-w-7xl mx-auto py-6">
-            <h1 className="text-2xl font-bold text-white mb-6 px-4">{event.title} - GRAVAÇÃO</h1>
+         <div className="max-w-7xl mx-auto py-6 px-4">
+            <button 
+              onClick={() => navigate('/app/eventos-ao-vivo')}
+              className="flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-white transition-colors mb-6 uppercase tracking-wider"
+            >
+              <ArrowLeft size={18} />
+              Voltar para a lista
+            </button>
+            <h1 className="text-2xl font-bold text-white mb-6">{event.title} - GRAVAÇÃO</h1>
             <StudentLiveRecording event={event} />
          </div>
       );
@@ -163,10 +226,17 @@ export const StudentLiveEventRoom: React.FC = () => {
     
     // Aluno comum (sem produto isolado)
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex flex-col items-center justify-center h-screen bg-black">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-white mb-2">Evento Encerrado</h2>
-          <p className="text-gray-400">Esta transmissão ao vivo já foi finalizada.</p>
+          <VideoOff size={48} className="mx-auto text-zinc-600 mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-tight">Evento Encerrado</h2>
+          <p className="text-gray-400 mb-6">Esta transmissão ao vivo já foi finalizada.</p>
+          <button 
+            onClick={() => navigate('/app/eventos-ao-vivo')}
+            className="px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors font-bold uppercase text-sm"
+          >
+            Voltar para a lista
+          </button>
         </div>
       </div>
     );

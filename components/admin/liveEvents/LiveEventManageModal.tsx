@@ -285,10 +285,10 @@ export const LiveEventManageModal: React.FC<LiveEventManageModalProps> = ({ even
                             className="flex-1 bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500"
                           />
                           <input
-                            type="url"
+                            type="text"
                             value={rec.url}
                             onChange={(e) => updateRecording(rec.id, 'url', e.target.value)}
-                            placeholder="Link do Vídeo"
+                            placeholder="Link do Vídeo ou Iframe (Panda/YouTube)"
                             className="flex-1 bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500"
                           />
                           <button

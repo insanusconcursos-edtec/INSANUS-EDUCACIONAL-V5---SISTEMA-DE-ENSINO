@@ -1,10 +1,27 @@
 import React, { useState } from 'react';
 import { Download, PlayCircle } from 'lucide-react';
+import { AlternativeYouTubePlayer } from '../../../shared/AlternativeYouTubePlayer';
 
 export const StudentLiveRecording = ({ event }: { event: any }) => {
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const recordings = event.recordings || [];
   const materials = event.materials || [];
+
+  const getYouTubeID = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const parseRecordingData = (data: string) => {
+    if (!data) return { isYouTube: false, videoId: null, rawEmbed: '' };
+    
+    // Se for um link direto ou iframe do YouTube
+    const isYouTube = data.includes('youtube.com') || data.includes('youtu.be');
+    const videoId = isYouTube ? getYouTubeID(data) : null;
+    
+    return { isYouTube, videoId, rawEmbed: data };
+  };
 
   if (recordings.length === 0) {
     return (
@@ -17,17 +34,25 @@ export const StudentLiveRecording = ({ event }: { event: any }) => {
   }
 
   const activeVideo = recordings[activeVideoIndex];
+  const { isYouTube, videoId, rawEmbed } = parseRecordingData(activeVideo.url);
 
   return (
     <div className="flex flex-col gap-6 p-4">
       {/* Player de Vídeo da Gravação */}
-      <div className="w-full aspect-video bg-black rounded-lg overflow-hidden border border-gray-800">
-         <iframe
-            src={activeVideo.url}
-            title={activeVideo.title}
-            className="w-full h-full border-0"
-            allowFullScreen
-         ></iframe>
+      <div className="w-full aspect-video bg-black rounded-lg overflow-hidden border border-gray-800 relative">
+        {isYouTube && videoId ? (
+          <AlternativeYouTubePlayer 
+            videoId={videoId} 
+            hideControls={true}
+            preventSharing={true}
+            customMask={true}
+          />
+        ) : (
+          <div 
+            className="w-full h-full panda-player-container" 
+            dangerouslySetInnerHTML={{ __html: rawEmbed }} 
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

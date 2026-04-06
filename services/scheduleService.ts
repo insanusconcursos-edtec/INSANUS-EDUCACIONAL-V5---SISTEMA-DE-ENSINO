@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { collection, addDoc, query, where, getDocs, updateDoc, doc, deleteDoc, Timestamp, writeBatch, getDoc, documentId, orderBy, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, writeBatch, getDoc, documentId, orderBy, arrayUnion } from 'firebase/firestore';
 import { Plan, getPlanById } from './planService';
 import { StudentRoutine, StudyProfile } from './studentService';
 import { getDisciplines, getTopics } from './structureService';
@@ -747,16 +747,18 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
   return finalEvents;
 };
 
-export const getLocalISODate = (date: Date = new Date()): string => {
+export const getLocalDataString = (date: Date = new Date()): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
 
+export const getLocalISODate = getLocalDataString;
+
 export const getRangeSchedule = async (userId: string, startDate: Date, endDate: Date): Promise<Record<string, ScheduledEvent[]>> => {
-    const startStr = getLocalISODate(startDate);
-    const endStr = getLocalISODate(endDate);
+    const startStr = getLocalDataString(startDate);
+    const endStr = getLocalDataString(endDate);
 
     const schedulesRef = collection(db, 'users', userId, 'schedules');
     const q = query(
@@ -778,336 +780,368 @@ export const getRangeSchedule = async (userId: string, startDate: Date, endDate:
     return scheduleMap;
 };
 
-export const rescheduleOverdueTasks = async (userId: string, planId: string, routine: number[], preserveToday: boolean = false): Promise<number> => {
+// Helper to commit new schedules to Firestore
+const commitNewSchedules = async (
+  userId: string,
+  planId: string,
+  todayStr: string,
+  newSchedules: Map<string, any[]>,
+  snapshot: any
+): Promise<number> => {
+  let batch = writeBatch(db);
+  let opCount = 0;
+
+  const commitBatch = async () => {
+    if (opCount > 0) {
+      await batch.commit();
+      batch = writeBatch(db);
+      opCount = 0;
+    }
+  };
+
+  // 1. Limpa documentos antigos e deleta os que ficaram vazios
+  for (const docSnap of snapshot.docs) {
+    const dateStr = docSnap.id;
+    if (dateStr < todayStr) {
+      const data = docSnap.data();
+      const items = data.items || [];
+      const remaining = items.filter((i: any) => 
+        i.planId !== planId || 
+        i.status !== 'pending' || 
+        i.isSpacedReview || 
+        i.type?.toLowerCase() === 'simulado' || 
+        i.isFixed
+      );
+      
+      if (remaining.length === 0) {
+        batch.delete(docSnap.ref);
+      } else {
+        batch.set(docSnap.ref, cleanObject({ date: dateStr, items: remaining }));
+      }
+    } else {
+      batch.delete(docSnap.ref);
+    }
+    opCount++;
+    if (opCount >= 450) await commitBatch();
+  }
+
+  // 2. Grava os novos documentos
+  for (const [dateStr, items] of newSchedules.entries()) {
+    const docRef = doc(db, 'users', userId, 'schedules', dateStr);
+    batch.set(docRef, cleanObject({ date: dateStr, items }));
+    opCount++;
+    if (opCount >= 450) await commitBatch();
+  }
+
+  await commitBatch();
+  return opCount;
+};
+
+const rescheduleContinuousEngine = async (
+  userId: string,
+  planId: string,
+  routine: any,
+  todayStr: string,
+  tasksToShift: any[],
+  fixedTasksByDate: Map<string, any[]>,
+  timeStudiedToday: Map<string, number>,
+  snapshot: any
+) => {
+  console.log(`[Motor Contínuo] Iniciando empuxo fluido para usuário ${userId}`);
+  
   const safeRoutine = Array.isArray(routine) 
     ? routine 
-    : [0, 1, 2, 3, 4, 5, 6].map(day => (routine as any)?.[day] || 0);
+    : [0, 1, 2, 3, 4, 5, 6].map(day => Number(routine?.[day]) || 0);
 
-  console.log(`Starting rescheduleOverdueTasks for user ${userId}, plan ${planId}`);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const newSchedules = new Map<string, any[]>();
+
+  for (const [date, items] of fixedTasksByDate.entries()) {
+    if (date >= todayStr) newSchedules.set(date, [...items]);
+  }
+
+  const getDayBaseCapacity = (date: Date) => {
+    const dStr = getLocalDataString(date);
+    const dayIdx = date.getDay();
+    const baseCap = safeRoutine[dayIdx] || 0;
+    const fixedItems = newSchedules.get(dStr) || [];
+    const occupiedByFixed = fixedItems.reduce((acc, i) => acc + (i.calculatedDuration || i.duration || 0), 0);
+    return Math.max(0, baseCap - occupiedByFixed);
+  };
+
+  const getRealDayCapacity = (date: Date) => {
+    let capacity = getDayBaseCapacity(date);
+    const dStr = getLocalDataString(date);
+    if (dStr === todayStr) capacity -= (timeStudiedToday.get(todayStr) || 0);
+    return Math.max(0, capacity);
+  };
+
+  const currentDate = new Date(today);
+  let realDayCapacity = getRealDayCapacity(currentDate);
+
+  for (const task of tasksToShift) {
+    let remainingTimeOfTask = task.calculatedDuration || task.duration || 0;
+    let partIndex = 1;
+
+    while (remainingTimeOfTask > 0) {
+      if (realDayCapacity <= 0) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        realDayCapacity = getRealDayCapacity(currentDate);
+        continue; 
+      }
+      
+      const dStr = getLocalDataString(currentDate);
+      const timeToAllocate = Math.min(remainingTimeOfTask, realDayCapacity);
+      
+      const slice = {
+        ...task,
+        date: dStr,
+        duration: timeToAllocate,
+        calculatedDuration: timeToAllocate,
+        part: (remainingTimeOfTask > timeToAllocate || partIndex > 1) ? partIndex : undefined,
+        willSplit: remainingTimeOfTask > timeToAllocate
+      };
+
+      if (!newSchedules.has(dStr)) newSchedules.set(dStr, []);
+      newSchedules.get(dStr)!.push(slice);
+      
+      remainingTimeOfTask -= timeToAllocate;
+      realDayCapacity -= timeToAllocate;
+      if (remainingTimeOfTask > 0) partIndex++;
+    }
+  }
+
+  return await commitNewSchedules(userId, planId, todayStr, newSchedules, snapshot);
+};
+
+const rescheduleRotativeEngine = async (
+  userId: string,
+  planId: string,
+  routine: any,
+  todayStr: string,
+  overdueTasks: any[],
+  futurePendingTasks: any[],
+  fixedTasksByDate: Map<string, any[]>,
+  timeStudiedToday: Map<string, number>,
+  snapshot: any
+) => {
+  console.log(`[Motor Rotativo] Iniciando empuxo total para usuário ${userId}`);
+
+  // 1. Preparação da Fila de Empuxo (Push Effect)
+  const allTasksToSchedule = [...overdueTasks, ...futurePendingTasks].sort((a, b) => 
+    (a.cycleOrder || 0) - (b.cycleOrder || 0) || 
+    (a.disciplineOrder || 0) - (b.disciplineOrder || 0) || 
+    (a.subjectOrder || 0) - (b.subjectOrder || 0) || 
+    (a.order || 0) - (b.order || 0)
+  );
+
+  if (allTasksToSchedule.length === 0) return 0;
+
+  // 2. Normalização da Rotina
+  const safeRoutine = Array.isArray(routine) 
+    ? routine 
+    : [0, 1, 2, 3, 4, 5, 6].map(day => Number(routine?.[day]) || 0);
+
+  // 3. Sincronização de Data e Índice
+  const now = new Date();
+  const currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Garanta que o getDay() do JS (Dom=0) se alinhe com o array do DB (ex: Seg=0)
+  const getRoutineIndex = (date: Date) => date.getDay() === 0 ? 6 : date.getDay() - 1;
+
+  const newSchedules = new Map<string, any[]>();
+  for (const [date, items] of fixedTasksByDate.entries()) {
+    if (date >= todayStr) newSchedules.set(date, [...items]);
+  }
+
+  const getDayBaseCapacity = (date: Date) => {
+    const dStr = getLocalDataString(date);
+    const dayIdx = getRoutineIndex(date);
+    const baseCap = safeRoutine[dayIdx] || 0;
+    
+    const fixedItems = newSchedules.get(dStr) || [];
+    const occupiedByFixed = fixedItems.reduce((acc, i) => acc + (i.calculatedDuration || i.duration || 0), 0);
+    
+    return Math.max(0, baseCap - occupiedByFixed);
+  };
+
+  const getRealDayCapacity = (date: Date) => {
+    let capacity = getDayBaseCapacity(date);
+    const dStr = getLocalDataString(date);
+    if (dStr === todayStr) {
+      capacity -= (timeStudiedToday.get(todayStr) || 0);
+    }
+    return Math.max(0, capacity);
+  };
+
+  // 4. O Loop de Alocação (Motor de Bloco Intacto & No-Gap)
+  for (const task of allTasksToSchedule) {
+    let taskRemaining = task.calculatedDuration || task.duration || 0;
+    let partIndex = 1;
+
+    while (taskRemaining > 0) {
+      // 1. Busca a capacidade MAXIMA do dia na rotina e o saldo RESTANTE
+      const dailyMaxCap = getDayBaseCapacity(currentDate);
+      const remainingCap = getRealDayCapacity(currentDate);
+
+      if (remainingCap <= 0) {
+        currentDate.setDate(currentDate.getDate() + 1); // Avança para o próximo dia e repete
+        continue;
+      }
+
+      const dStr = getLocalDataString(currentDate);
+
+      if (taskRemaining <= remainingCap) {
+        // CENÁRIO A: A meta cabe perfeitamente no tempo restante de hoje.
+        const timeToAllocate = taskRemaining;
+        const slice = {
+          ...task,
+          date: dStr,
+          duration: timeToAllocate,
+          calculatedDuration: timeToAllocate,
+          part: partIndex > 1 ? partIndex : undefined,
+          willSplit: false
+        };
+
+        if (!newSchedules.has(dStr)) newSchedules.set(dStr, []);
+        newSchedules.get(dStr)!.push(slice);
+        
+        taskRemaining = 0;
+      } 
+      else if (taskRemaining > dailyMaxCap) {
+        // CENÁRIO B: A meta é GIGANTE, maior que a carga horária de um dia inteiro. FATIAMENTO OBRIGATÓRIO.
+        const timeToAllocate = remainingCap;
+        const slice = {
+          ...task,
+          date: dStr,
+          duration: timeToAllocate,
+          calculatedDuration: timeToAllocate,
+          part: partIndex,
+          willSplit: true
+        };
+
+        if (!newSchedules.has(dStr)) newSchedules.set(dStr, []);
+        newSchedules.get(dStr)!.push(slice);
+
+        taskRemaining -= timeToAllocate;
+        partIndex++;
+        currentDate.setDate(currentDate.getDate() + 1); // Dia lotou, vai pro próximo
+      } 
+      else {
+        // CENÁRIO C: A meta cabe em um dia normal, mas NÃO CABE no tempo que sobrou de hoje.
+        // PROTEÇÃO DE BLOCO ROTATIVO: Não fatie. Encerre o dia de hoje mais cedo e jogue a meta inteira para amanhã.
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+  }
+
+  // 5. Gravação em Lotes (Batch)
+  return await commitNewSchedules(userId, planId, todayStr, newSchedules, snapshot);
+};
+
+export const rescheduleOverdueTasks = async (userId: string, planId: string, routine: any, preserveToday: boolean = false): Promise<number> => {
+  console.log(`[Replanejamento] Iniciando roteamento para usuário ${userId}, plano ${planId}`);
+
+  // 1. Ponto de Partida e Fuso Horário (Local Time)
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayStr = getLocalDataString(today);
+
+  // 2. Coleta de Dados
+  const plan = await getPlanById(planId);
+  const cycleSystem = plan?.cycleSystem?.toUpperCase();
+
   const schedulesRef = collection(db, 'users', userId, 'schedules');
   const snapshot = await getDocs(schedulesRef);
-  let batch = writeBatch(db);
-  let batchCount = 0;
-  const todayStr = getLocalISODate(new Date());
   
   const overdueTasks: any[] = [];
-  const allFutureTasks: any[] = [];
-  let todayItems: any[] = [];
+  const futurePendingTasks: any[] = [];
+  const fixedTasksByDate = new Map<string, any[]>();
+  const timeStudiedToday = new Map<string, number>();
 
   const sortedDocs = [...snapshot.docs].sort((a, b) => a.id.localeCompare(b.id));
 
-  for (const document of sortedDocs) {
-    const dateStr = document.id;
-    const data = document.data();
-    if (!data.items) continue;
+  for (const docSnap of sortedDocs) {
+    const dateStr = docSnap.id;
+    const data = docSnap.data();
+    const items = data.items || [];
 
-    if (dateStr < todayStr) {
-      // Coleta atrasadas deste plano
-      const pending = data.items.filter((i: any) => i.planId === planId && i.status === 'pending');
-      if (pending.length > 0) {
-        overdueTasks.push(...pending);
-        const remaining = data.items.filter((i: any) => !(i.planId === planId && i.status === 'pending'));
-        if (remaining.length === 0) {
-          batch.delete(document.ref);
-          batchCount++;
+    const fixed: any[] = [];
+    for (const item of items) {
+      const isTargetPlan = item.planId === planId;
+      const isPending = item.status === 'pending';
+      const isSpecial = item.isSpacedReview || item.type?.toLowerCase() === 'simulado' || item.isFixed;
+
+      if (isTargetPlan && isPending && !isSpecial) {
+        if (dateStr < todayStr) {
+          overdueTasks.push(item);
+        } else if (dateStr === todayStr && preserveToday) {
+          fixed.push(item);
         } else {
-          batch.set(document.ref, cleanObject({ date: dateStr, items: remaining }));
-          batchCount++;
+          futurePendingTasks.push(item);
         }
-      }
-    } else if (dateStr === todayStr) {
-      if (preserveToday) {
-        todayItems = data.items;
       } else {
-        // Se não preservar hoje, hoje entra no empuxo
-        const itemsWithDate = data.items.map((i: any) => ({ ...i, date: dateStr }));
-        allFutureTasks.push(...itemsWithDate);
-        batch.delete(document.ref);
-        batchCount++;
+        fixed.push(item);
       }
-    } else {
-      // Futuro
-      const itemsWithDate = data.items.map((i: any) => ({ ...i, date: dateStr }));
-      allFutureTasks.push(...itemsWithDate);
-      batch.delete(document.ref);
-      batchCount++;
+
+      if (dateStr === todayStr) {
+        const studied = Number(item.recordedMinutes || 0);
+        timeStudiedToday.set(todayStr, (timeStudiedToday.get(todayStr) || 0) + studied);
+      }
     }
 
-    if (batchCount >= 450) {
-      await batch.commit();
-      batch = writeBatch(db);
-      batchCount = 0;
+    if (fixed.length > 0) {
+      fixedTasksByDate.set(dateStr, fixed);
     }
   }
 
-  if (overdueTasks.length === 0 && allFutureTasks.length === 0) return 0;
+  // 3. Bifurcação de Motores
+  if (cycleSystem === 'ROTATIVE') {
+    // 3.1 Enriquecimento Hierárquico (Garantia de Ordem para Ciclo Rotativo)
+    // Buscamos as ordens das disciplinas para garantir que o sort absoluto funcione
+    const discSnap = await getDocs(query(collection(db, 'plans', planId, 'disciplines'), orderBy('order')));
+    const discOrderMap = new Map();
+    discSnap.docs.forEach((d, i) => discOrderMap.set(d.id, d.data().order ?? i));
 
-  // 1. FILTRAGEM NO INÍCIO DA FUNÇÃO
-  // Metas que serão redistribuídas (removendo simulados e revisões espaçadas)
-  let rawTasksToShift = allFutureTasks.filter(t => t.planId === planId && t.status === 'pending' && !t.isSpacedReview && t.type?.toLowerCase() !== 'simulado');
+    const cycleOrderMap = new Map();
+    (plan.cycles || []).forEach((c: any, i: number) => cycleOrderMap.set(c.id, c.order ?? i));
 
-  // Metas que ficarão fixadas onde estão (incluindo metas de outros planos)
-  const fixedTasks = allFutureTasks.filter(t => t.planId !== planId || t.status !== 'pending' || t.isSpacedReview || t.type?.toLowerCase() === 'simulado');
+    const enrichTask = (t: any) => ({
+      ...t,
+      cycleOrder: cycleOrderMap.get(t.cycleId) || 0,
+      disciplineOrder: discOrderMap.get(t.subjectId) || 0,
+      // subjectOrder e order já devem vir no objeto da meta se o agendamento original foi correto
+      subjectOrder: t.subjectOrder || 0,
+      order: t.order || 0
+    });
 
-  // Adiciona as atrasadas no início da fila de empuxo
-  rawTasksToShift = [...overdueTasks, ...rawTasksToShift];
-
-  // Reagrupar metas fatiadas (mesmo taskId) para reconstruir a duração total antes de redistribuir (Melt & Re-Cast)
-  const mergedTasksMap = new Map();
-  for (const item of rawTasksToShift) {
-    const baseId = item.metaId || item.taskId || item.id;
-    if (mergedTasksMap.has(baseId)) {
-      const existing = mergedTasksMap.get(baseId);
-      existing.calculatedDuration = (existing.calculatedDuration || existing.duration || 0) + (item.calculatedDuration || item.duration || 0);
-      existing.duration = existing.calculatedDuration;
-      if (!existing.part && item.part) existing.part = item.part;
-      
-      // Preservar conteúdos de todas as partes fundidas
-      if (item.videos?.length) existing.videos = [...(existing.videos || []), ...item.videos];
-      if (item.files?.length) existing.files = [...(existing.files || []), ...item.files];
-      if (item.links?.length) existing.links = [...(existing.links || []), ...item.links];
-      if (item.mindMap?.length) existing.mindMap = [...(existing.mindMap || []), ...item.mindMap];
-      if (item.flashcards?.length) existing.flashcards = [...(existing.flashcards || []), ...item.flashcards];
-      if (item.questions?.length) existing.questions = [...(existing.questions || []), ...item.questions];
-    } else {
-      mergedTasksMap.set(baseId, { ...item });
-    }
-  }
-  const tasksToShift = Array.from(mergedTasksMap.values());
-
-  // 2. Efeito Empuxo (Reagendar o resto para o futuro)
-  const currentDate = new Date(todayStr + 'T00:00:00');
-  if (preserveToday) currentDate.setDate(currentDate.getDate() + 1);
-  
-  const newFutureSchedules = new Map<string, any[]>();
-
-  // 3. REINSERIR AS METAS FIXAS NO CALENDÁRIO
-  for (const fixedTask of fixedTasks) {
-    const originalDate = fixedTask.date; 
-    if (!newFutureSchedules.has(originalDate)) {
-      newFutureSchedules.set(originalDate, []);
-    }
-    newFutureSchedules.get(originalDate)!.push(fixedTask);
-  }
-
-  // Função auxiliar para calcular capacidade real do dia (Routine - FixedTasks)
-  const getRealDayCapacity = (date: Date) => {
-    const dStr = getLocalISODate(date);
-    const baseCap = safeRoutine[date.getDay()] || 0;
-    const fixedItems = newFutureSchedules.get(dStr) || [];
-    const fixedDuration = fixedItems.reduce((acc, item) => acc + (item.calculatedDuration || item.duration || 0), 0);
-    return Math.max(0, baseCap - fixedDuration);
-  };
-
-  let currentDayCapacity = getRealDayCapacity(currentDate);
-
-  // Loop de redistribuição (Empuxo)
-  for (const task of tasksToShift) {
-    const normalizedType = task.type?.toLowerCase() || 'lesson';
+    return await rescheduleRotativeEngine(
+      userId, 
+      planId, 
+      routine, 
+      todayStr, 
+      overdueTasks.map(enrichTask), 
+      futurePendingTasks.map(enrichTask), 
+      fixedTasksByDate, 
+      timeStudiedToday, 
+      snapshot
+    );
+  } else {
+    // Motor legado intacto (Empuxo Fluido)
+    const tasksToShift = [...overdueTasks, ...futurePendingTasks];
+    if (tasksToShift.length === 0) return 0;
     
-    let currentPart = task.startingPart || task.part || 1;
-
-    // Limpa o lixo de estados anteriores (Sanitização)
-    delete task.part;
-    delete task.startingPart;
-    delete task.willSplit;
-    delete task.isSplitContinuity;
-
-    let remainingDuration = task.calculatedDuration || task.duration;
-    if (!remainingDuration || remainingDuration === 30) {
-      if (['law', 'lei_seca', 'lei seca'].includes(normalizedType)) {
-        const pagesCount = Number(task.pages || task.lawConfig?.pages || task.pageCount) || 1; 
-        const multiplierValue = Number(task.multiplier || task.speed || task.lawConfig?.multiplier || task.lawConfig?.speedFactor) || 1; 
-        remainingDuration = (pagesCount * 2) * multiplierValue;
-        if (remainingDuration <= 0) remainingDuration = 2;
-      } else {
-        remainingDuration = remainingDuration || 30;
-      }
-    }
-    const originalTotalDuration = task.totalDuration || task.calculatedDuration || task.duration || remainingDuration; 
-    const isSplittableType = ['material', 'questions', 'lesson', 'questões', 'questoes', 'pdf'].includes(normalizedType);
-    let lastAllocatedDate: string | null = null;
-
-    // Filas de consumo (Lifting)
-    const pendingVideos = [...(task.videos || [])];
-    let pendingFiles = [...(task.files || [])];
-    let pendingLinks = [...(task.links || [])];
-    let pendingMindMap = [...(task.mindMap || [])];
-    let pendingFlashcards = [...(task.flashcards || [])];
-    let pendingQuestions = [...(task.questions || [])];
-
-    while (remainingDuration > 0) {
-      let dStr = getLocalISODate(currentDate);
-      let hasSimulado = newFutureSchedules.get(dStr)?.some(i => i.type?.toLowerCase() === 'simulado');
-
-      while (currentDayCapacity <= 0 || hasSimulado) {
-        currentDate.setDate(currentDate.getDate() + 1);
-        currentDayCapacity = getRealDayCapacity(currentDate);
-        dStr = getLocalISODate(currentDate);
-        hasSimulado = newFutureSchedules.get(dStr)?.some(i => i.type?.toLowerCase() === 'simulado');
-      }
-
-      if (lastAllocatedDate && dStr !== lastAllocatedDate) {
-        currentPart++;
-      }
-      lastAllocatedDate = dStr;
-
-      if (!isSplittableType && remainingDuration > currentDayCapacity) {
-        const maxDayCapacity = getRealDayCapacity(currentDate);
-        if (currentDayCapacity < maxDayCapacity && maxDayCapacity > 0) {
-          currentDayCapacity = 0;
-          continue;
-        }
-      }
-
-      let allocated = !isSplittableType ? remainingDuration : Math.min(remainingDuration, currentDayCapacity);
-
-      // Motor de Fatiamento de Conteúdo
-      const consumedVideos: any[] = [];
-      let consumedFiles: any[] = [];
-      let consumedLinks: any[] = [];
-      let consumedMindMap: any[] = [];
-      let consumedFlashcards: any[] = [];
-      let consumedQuestions: any[] = [];
-
-      if ((normalizedType === 'lesson' || normalizedType === 'aula') && pendingVideos.length > 0) {
-        let timeFromContent = 0;
-        while (pendingVideos.length > 0) {
-          const itemDur = Number(pendingVideos[0].duration || 0);
-          if (timeFromContent + itemDur <= allocated || timeFromContent === 0) {
-            timeFromContent += itemDur;
-            consumedVideos.push(pendingVideos.shift());
-          } else {
-            break;
-          }
-        }
-        allocated = timeFromContent; 
-      }
-
-      // Distribui o resto do conteúdo
-      if (remainingDuration - allocated <= 0) {
-        consumedFiles = [...pendingFiles];
-        consumedLinks = [...pendingLinks];
-        consumedMindMap = [...pendingMindMap];
-        consumedFlashcards = [...pendingFlashcards];
-        consumedQuestions = [...pendingQuestions];
-        pendingFiles = []; pendingLinks = []; pendingMindMap = []; pendingFlashcards = []; pendingQuestions = [];
-      } else {
-        let timeToFill = allocated;
-        while (pendingFiles.length > 0 && (consumedFiles.length === 0 || (pendingFiles[0].duration || 0) <= timeToFill)) {
-          const item = pendingFiles.shift();
-          consumedFiles.push(item);
-          timeToFill -= (item.duration || 0);
-          if (timeToFill <= 0) break;
-        }
-        // ... outros conteúdos seguem lógica similar se necessário, ou ficam para o final
-      }
-
-      if (!newFutureSchedules.has(dStr)) newFutureSchedules.set(dStr, []);
-      const dayItems = newFutureSchedules.get(dStr)!;
-
-      // Radar de Identidade e Fusão
-      const existingTask = dayItems.find(t => 
-        (t.metaId && task.metaId && t.metaId === task.metaId) ||
-        (t.taskId && task.taskId && t.taskId === task.taskId) ||
-        (t.id && task.id && t.id === task.id) ||
-        (t.title === task.title && t.type?.toLowerCase() === task.type?.toLowerCase() && t.order === task.order)
-      );
-
-      if (existingTask) {
-        existingTask.duration += allocated;
-        existingTask.calculatedDuration = (existingTask.calculatedDuration || existingTask.duration) + allocated;
-        
-        // Fusão de conteúdos CONSUMIDOS
-        if (consumedVideos.length > 0) existingTask.videos = [...(existingTask.videos || []), ...consumedVideos];
-        if (consumedFiles.length > 0) existingTask.files = [...(existingTask.files || []), ...consumedFiles];
-        if (consumedLinks.length > 0) existingTask.links = [...(existingTask.links || []), ...consumedLinks];
-        if (consumedQuestions.length > 0) existingTask.questions = [...(existingTask.questions || []), ...consumedQuestions];
-        if (consumedMindMap.length > 0) existingTask.mindMap = [...(existingTask.mindMap || []), ...consumedMindMap];
-        if (consumedFlashcards.length > 0) existingTask.flashcards = [...(existingTask.flashcards || []), ...consumedFlashcards];
-
-        existingTask.totalDuration = originalTotalDuration;
-        // A meta só perde o rótulo se atingiu o tempo total E está inteira em um único dia (currentPart === 1)
-        if (!isSplittableType || (currentPart === 1 && existingTask.calculatedDuration >= originalTotalDuration)) {
-          delete existingTask.part;
-          delete existingTask.startingPart;
-          existingTask.willSplit = false;
-          existingTask.isSplitContinuity = false;
-        } else {
-          // Se não atingiu o total, ou se atingiu mas é a parte 2 em diante, ela mantém o rótulo
-          existingTask.part = currentPart > 1 ? currentPart : (existingTask.part || 1);
-          existingTask.willSplit = true;
-        }
-      } else {
-        const taskForThisDay: any = {
-          ...task,
-          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-          date: dStr,
-          duration: allocated,
-          calculatedDuration: allocated,
-          totalDuration: originalTotalDuration,
-          status: 'pending'
-        };
-
-        if (isSplittableType && (currentPart > 1 || allocated < originalTotalDuration)) {
-          taskForThisDay.part = currentPart;
-          taskForThisDay.willSplit = true;
-        } else {
-          delete taskForThisDay.part;
-          taskForThisDay.willSplit = false;
-        }
-
-        // Atribui conteúdos consumidos
-        taskForThisDay.videos = consumedVideos;
-        taskForThisDay.files = consumedFiles;
-        taskForThisDay.links = consumedLinks;
-        taskForThisDay.questions = consumedQuestions;
-        taskForThisDay.mindMap = consumedMindMap;
-        taskForThisDay.flashcards = consumedFlashcards;
-
-        dayItems.push(taskForThisDay);
-      }
-
-      remainingDuration -= allocated;
-      currentDayCapacity -= allocated;
-    }
+    return await rescheduleContinuousEngine(
+      userId, planId, routine, todayStr, tasksToShift, fixedTasksByDate, timeStudiedToday, snapshot
+    );
   }
-
-  // Se preserveToday, restaura o dia de hoje
-  if (preserveToday) {
-    const todayDocRef = doc(db, 'users', userId, 'schedules', todayStr);
-    batch.set(todayDocRef, cleanObject({ date: todayStr, items: todayItems }), { merge: true });
-    batchCount++;
-    if (batchCount >= 450) {
-      await batch.commit();
-      batch = writeBatch(db);
-      batchCount = 0;
-    }
-  }
-
-  // Persistir novos dias
-  for (const [date, items] of newFutureSchedules.entries()) {
-    const docRef = doc(db, 'users', userId, 'schedules', date);
-    batch.set(docRef, cleanObject({ date, items }));
-    batchCount++;
-    
-    if (batchCount >= 450) {
-      await batch.commit();
-      batch = writeBatch(db);
-      batchCount = 0;
-    }
-  }
-
-  if (batchCount > 0) {
-    await batch.commit();
-  }
-  console.log("Reschedule completed. Total overdue processed:", overdueTasks.length);
-  return overdueTasks.length;
 };
+
 
 export const mergeGoalExtension = async (userId: string, planId: string, event: ScheduledEvent) => {
     console.log("mergeGoalExtension called for event:", event.id);
-    const todayStr = getLocalISODate(new Date());
+    const todayStr = getLocalDataString(new Date());
     const eventDate = event.date || todayStr;
     const batch = writeBatch(db);
 
@@ -1225,7 +1259,7 @@ export const scheduleUserActiveGoal = async (userId: string, goal: any) => {
 }
 
 export const scheduleUserSimulado = async (userId: string, planId: string, simuladoTask: any, date: Date) => {
-    const targetDateStr = getLocalISODate(date);
+    const targetDateStr = getLocalDataString(date);
     
     // Fetch user profile and routine
     const userRef = doc(db, 'users', userId);
