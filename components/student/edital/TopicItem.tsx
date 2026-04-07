@@ -2,13 +2,24 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  ChevronRight, ChevronDown, CheckCircle2, Circle, Folder, Lock, AlertTriangle, Loader2, StickyNote
+  ChevronRight, ChevronDown, CheckCircle2, Circle, Folder, Lock, AlertTriangle, Loader2, StickyNote, CalendarClock
 } from 'lucide-react';
 import { EdictTopic, EdictSubtopic, EdictStudyLevel } from '../../../services/edictService';
 import { Meta, MetaType } from '../../../services/metaService';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useSpacedReviewModal } from '../../../contexts/SpacedReviewModalContext';
 import { editalProgressService } from '../../../services/editalProgressService';
 import LinkedGoalItem from './LinkedGoalItem';
+
+// IMPORTAÇÕES DO SISTEMA DE REVISÃO
+import { courseReviewService, CourseReview } from '../../../services/courseReviewService';
+
+// Helper para formatar data curta (dd/mm)
+const formatShortDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}`;
+};
 
 interface TopicItemProps {
   item: EdictTopic | EdictSubtopic;
@@ -17,6 +28,8 @@ interface TopicItemProps {
   activeUserMode?: boolean;
   metaLookup?: Record<string, Meta>;
   planId?: string;
+  disciplineId?: string; // NOVO
+  disciplineName?: string; // NOVO
   studyLevels?: EdictStudyLevel[];
   onToggleGoal?: (goal: Meta) => void;
   onBatchToggle?: (ids: string[], status: boolean) => void; // NEW PROP FOR BATCH UPDATE
@@ -30,15 +43,21 @@ const TopicItem: React.FC<TopicItemProps> = ({
   activeUserMode = false,
   metaLookup = {},
   planId,
+  disciplineId,
+  disciplineName,
   studyLevels,
   onToggleGoal,
   onBatchToggle,
   onPlayVideo
 }) => {
   const { currentUser } = useAuth();
+  const { triggerReviewModal } = useSpacedReviewModal();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // ESTADO PARA ARMAZENAR REVISÕES DESTE TÓPICO
+  const [topicReviews, setTopicReviews] = useState<CourseReview[]>([]);
 
   // --- LOCAL STATE FOR OPTIMISTIC UI ---
   const [localCompletedIds, setLocalCompletedIds] = useState<Set<string>>(new Set());
@@ -129,6 +148,26 @@ const TopicItem: React.FC<TopicItemProps> = ({
 
   const isFullyComplete = progressStats.total > 0 && progressStats.completed === progressStats.total;
 
+  // Carregar revisões do tópico
+  const fetchReviews = async () => {
+    if (currentUser) {
+        try {
+            const reviews = await courseReviewService.getReviewsByTopic(currentUser.uid, String(item.id));
+            setTopicReviews(reviews);
+        } catch (error) {
+            console.error("Erro ao buscar revisões:", error);
+        }
+    }
+  };
+
+  useEffect(() => {
+    if (isFullyComplete || isExpanded) {
+        fetchReviews();
+    } else {
+        setTopicReviews([]);
+    }
+  }, [isFullyComplete, isExpanded, currentUser, item.id]);
+
   // --- HANDLERS ---
 
   const handleStatusClick = (e: React.MouseEvent) => {
@@ -139,38 +178,54 @@ const TopicItem: React.FC<TopicItemProps> = ({
        return; // Lock icon shows this is disabled
     }
 
-    // 2. Logic: Only allow COMPLETING via bulk action.
-    if (!isFullyComplete && allMetaIds.length > 0) {
-        setShowConfirmModal(true);
-    }
+    // 2. Logic: Allow toggling (Complete or Uncheck)
+    setShowConfirmModal(true);
   };
 
   const confirmCompletion = async () => {
     if (!currentUser || !planId) return;
     setIsProcessing(true);
     try {
-        // 1. Call Service (Persistence)
-        await editalProgressService.completeTopicManually(currentUser.uid, planId, allMetaIds);
-        
-        // 2. Optimistic UI Update (Immediate Green Check)
-        const newLocal = new Set(localCompletedIds);
-        allMetaIds.forEach(id => newLocal.add(id));
-        setLocalCompletedIds(newLocal);
+        if (isFullyComplete) {
+            // DESMARCAR TÓPICO
+            await editalProgressService.completeTopicManually(currentUser.uid, planId, allMetaIds, false);
+            
+            // Apaga as revisões do banco
+            try {
+                await courseReviewService.deleteReviewsByTopic(currentUser.uid, String(item.id));
+                setTopicReviews([]);
+            } catch (error) {
+                console.error("Erro ao apagar revisões:", error);
+            }
 
-        // 3. FORCE VISUAL UPDATE ON CHILDREN
-        setRemountToken(prev => prev + 1);
+            // Sync visual state
+            if (onBatchToggle) onBatchToggle(allMetaIds, false);
+            
+            setShowConfirmModal(false);
+        } else {
+            // CONCLUIR TÓPICO
+            await editalProgressService.completeTopicManually(currentUser.uid, planId, allMetaIds);
+            
+            // Optimistic UI Update
+            const newLocal = new Set(localCompletedIds);
+            allMetaIds.forEach(id => newLocal.add(id));
+            setLocalCompletedIds(newLocal);
+            setRemountToken(prev => prev + 1);
 
-        // 4. Trigger Batch State Update on Parent (Visual Sync Fix)
-        if (onBatchToggle) {
-             onBatchToggle(allMetaIds, true);
-        } else if (onToggleGoal && allMetaIds.length > 0 && metaLookup && metaLookup[allMetaIds[0]]) {
-             // Fallback single trigger (Deprecated but safe)
-             onToggleGoal(metaLookup[allMetaIds[0]]); 
+            if (onBatchToggle) onBatchToggle(allMetaIds, true);
+
+            setShowConfirmModal(false);
+            // Abre o modal de agendar revisão via Contexto Global
+            triggerReviewModal({
+                planId: planId || '',
+                disciplineId: disciplineId || '',
+                disciplineName: disciplineName || '',
+                topicId: item.id,
+                topicName: item.name
+            });
         }
-
-        setShowConfirmModal(false);
     } catch (error) {
-        console.error("Erro ao concluir em lote", error);
+        console.error("Erro ao atualizar tópico", error);
         alert("Erro ao salvar progresso.");
     } finally {
         setIsProcessing(false);
@@ -223,7 +278,7 @@ const TopicItem: React.FC<TopicItemProps> = ({
   const isTopic = depth === 0;
 
   return (
-    <div className="flex flex-col">
+    <div id={`topic-${item.id}`} className="flex flex-col">
       {/* HEADER ROW */}
       <div 
         className={`
@@ -247,6 +302,28 @@ const TopicItem: React.FC<TopicItemProps> = ({
                 </h4>
             </div>
             
+            {/* ÁREA DE REVISÕES VISUAIS (Badge System) */}
+            {topicReviews.length > 0 && (
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    {topicReviews.map((rev) => {
+                        const isRevDone = rev.status === 'completed';
+                        return (
+                            <div 
+                               key={rev.id}
+                               className={`text-[8px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 uppercase tracking-wider transition-colors
+                                  ${isRevDone 
+                                      ? 'bg-emerald-900/20 text-emerald-500 border-emerald-900/40' 
+                                      : 'bg-zinc-800 text-zinc-500 border-zinc-700'}
+                               `}
+                            >
+                               {isRevDone ? <CheckCircle2 size={8} /> : <CalendarClock size={8} />}
+                               REV {rev.reviewIndex} ({formatShortDate(rev.scheduledDate)})
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
             {/* Progress Micro-Bar (Mobile/Desktop) */}
             {progressStats.total > 0 && (
                 <div className="flex items-center gap-2 mt-1.5 w-full max-w-[200px]">
@@ -332,6 +409,8 @@ const TopicItem: React.FC<TopicItemProps> = ({
                     activeUserMode={activeUserMode}
                     metaLookup={metaLookup}
                     planId={planId}
+                    disciplineId={disciplineId}
+                    disciplineName={disciplineName}
                     studyLevels={studyLevels}
                     onToggleGoal={onToggleGoal}
                     onBatchToggle={onBatchToggle} // PROPAGATE BATCH TOGGLE DOWN
@@ -364,14 +443,20 @@ const TopicItem: React.FC<TopicItemProps> = ({
                     </div>
                     
                     <h3 className="text-lg font-black text-white uppercase tracking-tighter">
-                        Concluir Tópico?
+                        {isFullyComplete ? 'Desmarcar Tópico?' : 'Concluir Tópico?'}
                     </h3>
                     
                     <div className="text-sm text-zinc-400 leading-relaxed">
-                        <p>Você está prestes a marcar <strong>todas as {progressStats.total} metas</strong> deste tópico como concluídas.</p>
-                        <p className="mt-2 text-xs bg-zinc-950 p-2 rounded border border-zinc-800 text-zinc-500">
-                            Isso removerá quaisquer agendamentos futuros dessas metas do seu calendário.
-                        </p>
+                        {isFullyComplete ? (
+                            <p>Deseja desmarcar este tópico? Isso apagará todas as revisões agendadas para ele e reiniciará o ciclo.</p>
+                        ) : (
+                            <>
+                                <p>Você está prestes a marcar <strong>todas as {progressStats.total} metas</strong> deste tópico como concluídas.</p>
+                                <p className="mt-2 text-xs bg-zinc-950 p-2 rounded border border-zinc-800 text-zinc-500">
+                                    Isso removerá quaisquer agendamentos futuros dessas metas do seu calendário.
+                                </p>
+                            </>
+                        )}
                     </div>
 
                     <div className="flex gap-3 w-full mt-2">
@@ -385,7 +470,7 @@ const TopicItem: React.FC<TopicItemProps> = ({
                         <button 
                             onClick={confirmCompletion}
                             disabled={isProcessing}
-                            className="flex-1 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase text-xs tracking-widest transition-all shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2"
+                            className={`flex-1 py-3 rounded-lg text-white font-black uppercase text-xs tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 ${isFullyComplete ? 'bg-red-600 hover:bg-red-500 shadow-red-900/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20'}`}
                         >
                             {isProcessing ? <Loader2 size={14} className="animate-spin" /> : 'Confirmar'}
                         </button>
@@ -395,6 +480,7 @@ const TopicItem: React.FC<TopicItemProps> = ({
         </div>,
         document.body
       )}
+
     </div>
   );
 };

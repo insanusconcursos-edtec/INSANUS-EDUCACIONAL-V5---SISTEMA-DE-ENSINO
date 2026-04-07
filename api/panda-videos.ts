@@ -9,6 +9,8 @@ interface PandaVideo {
   folderId?: string | null;
   video_player_url?: string;
   embed_url?: string;
+  external_id?: string | null;
+  playback_id?: string | null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

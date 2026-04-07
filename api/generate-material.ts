@@ -50,7 +50,7 @@ function extractPandaId(url: string): string | null {
     }
     
     return pathParts[pathParts.length - 1] || url;
-  } catch (_e) {
+  } catch {
     return url;
   }
 }

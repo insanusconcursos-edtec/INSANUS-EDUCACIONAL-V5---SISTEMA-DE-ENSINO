@@ -184,19 +184,21 @@ const generateExecutionQueue = (cycles: any[], logicalSubjectsBySubj: Record<str
   const progress: Record<string, number> = {}; 
 
   // Helper to expand cycle items into a flat list of processable units (Discipline or Simulado)
-  const expandCycleItems = (items: any[]) => {
+  const expandCycleItems = (items: any[], cycleOrder: number) => {
     const expanded: any[] = [];
-    for (const item of items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemOrder = i;
       if (item.type === 'discipline') {
-        expanded.push({ type: 'discipline', id: item.referenceId, topicsPerTurn: item.topicsPerTurn });
+        expanded.push({ type: 'discipline', id: item.referenceId, topicsPerTurn: item.topicsPerTurn, cycleOrder, itemOrder });
       } else if (item.type === 'folder') {
         const folderDisciplines = disciplines.filter(d => d.folderId === item.referenceId);
         folderDisciplines.sort((a, b) => (a.order || 0) - (b.order || 0));
-        folderDisciplines.forEach(d => {
-          expanded.push({ type: 'discipline', id: d.id, topicsPerTurn: item.topicsPerTurn });
+        folderDisciplines.forEach((d, dIdx) => {
+          expanded.push({ type: 'discipline', id: d.id, topicsPerTurn: item.topicsPerTurn, cycleOrder, itemOrder, folderOrder: dIdx });
         });
       } else if (item.type === 'simulado') {
-        expanded.push({ type: 'simulado', id: item.id, referenceId: item.referenceId, title: item.simuladoTitle, duration: item.duration });
+        expanded.push({ type: 'simulado', id: item.id, referenceId: item.referenceId, title: item.simuladoTitle, duration: item.duration, cycleOrder, itemOrder });
       }
     }
     return expanded;
@@ -208,8 +210,10 @@ const generateExecutionQueue = (cycles: any[], logicalSubjectsBySubj: Record<str
       hasMoreTopicsGlobal = false;
       let topicsAddedInThisGlobalRound = false;
 
-      for (const cycle of cycles) {
-        const expandedItems = expandCycleItems(cycle.items || []);
+      for (let cIdx = 0; cIdx < cycles.length; cIdx++) {
+        const cycle = cycles[cIdx];
+        const cycleOrder = cycle.order ?? cIdx;
+        const expandedItems = expandCycleItems(cycle.items || [], cycleOrder);
         
         for (const item of expandedItems) {
           if (item.type === 'simulado') {
@@ -228,11 +232,15 @@ const generateExecutionQueue = (cycles: any[], logicalSubjectsBySubj: Record<str
                topicsAddedInThisGlobalRound = true;
 
                 const groupsToProcess = groups.slice(currentIdx, currentIdx + topicsPerRound);
-                groupsToProcess.forEach(g => {
-                    const tasksWithCycle = g.tasks.map(t => ({ 
+                groupsToProcess.forEach((g, gIdx) => {
+                    const tasksWithCycle = g.tasks.map((t, tIdx) => ({ 
                       ...t, 
                       cycleId: cycle.id,
-                      cycleName: cycle.title || cycle.name
+                      cycleName: cycle.title || cycle.name,
+                      cycleOrder: item.cycleOrder,
+                      disciplineOrder: item.itemOrder,
+                      subjectOrder: currentIdx + gIdx,
+                      taskOrder: tIdx
                     }));
                     flatQueue.push(...tasksWithCycle);
                 });
@@ -246,9 +254,10 @@ const generateExecutionQueue = (cycles: any[], logicalSubjectsBySubj: Record<str
     }
   } else {
     // CONTÍNUO
-    for (const cycle of cycles) {
-      const expandedItems = expandCycleItems(cycle.items || []);
-      const simuladosAdded = new Set<string>();
+    for (let cIdx = 0; cIdx < cycles.length; cIdx++) {
+      const cycle = cycles[cIdx];
+      const cycleOrder = cycle.order ?? cIdx;
+      const expandedItems = expandCycleItems(cycle.items || [], cycleOrder);
 
       let hasMoreTopicsCycle = true;
       while (hasMoreTopicsCycle) {
@@ -272,11 +281,15 @@ const generateExecutionQueue = (cycles: any[], logicalSubjectsBySubj: Record<str
                 topicsAddedInThisRound = true;
 
                 const groupsToProcess = groups.slice(currentIdx, currentIdx + topicsPerRound);
-                groupsToProcess.forEach(g => {
-                    const tasksWithCycle = g.tasks.map(t => ({ 
+                groupsToProcess.forEach((g, gIdx) => {
+                    const tasksWithCycle = g.tasks.map((t, tIdx) => ({ 
                       ...t, 
                       cycleId: cycle.id,
-                      cycleName: cycle.title || cycle.name
+                      cycleName: cycle.title || cycle.name,
+                      cycleOrder: item.cycleOrder,
+                      disciplineOrder: item.itemOrder,
+                      subjectOrder: currentIdx + gIdx,
+                      taskOrder: tIdx
                     }));
                     flatQueue.push(...tasksWithCycle);
                 });
@@ -434,6 +447,9 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
 
   // FASE 3: Bin Packing (Allocation)
   const currentDate = new Date();
+  const SCHEDULE_WINDOW_DAYS = 21;
+  const limitDate = new Date(currentDate);
+  limitDate.setDate(limitDate.getDate() + SCHEDULE_WINDOW_DAYS);
   
   const getMinutesForDate = (date: Date, isFirstDay: boolean = false): number => {
     const dayOfWeek = date.getDay(); 
@@ -518,6 +534,10 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
         currentDate.setDate(currentDate.getDate() + 1);
         currentDayOfWeek = currentDate.getDay();
         currentDayCapacity = safeRoutine[currentDayOfWeek as keyof StudentRoutine] || 0;
+      }
+
+      if (currentDate > limitDate) {
+        break;
       }
 
       // 4. CUIDADO COM INDIVISÍVEIS
@@ -680,6 +700,10 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
           duration: actualAllocatedTime,
           totalDuration: originalDuration,
           order: task.order ?? 999,
+          cycleOrder: task.cycleOrder ?? 0,
+          disciplineOrder: task.disciplineOrder ?? 0,
+          subjectOrder: task.subjectOrder ?? 0,
+          taskOrder: task.taskOrder ?? 0,
           color: task.color || null,
           videos: currentPartVideos,
           files: currentPartFiles,
@@ -703,6 +727,11 @@ export const generateSchedule = async (userId: string, planId: string, studyProf
 
       currentDayCapacity -= actualAllocatedTime;
       remainingDuration -= actualAllocatedTime;
+    }
+
+    if (currentDate > limitDate) {
+      console.log("Limite da janela deslizante atingido. Pausando agendamento.");
+      break;
     }
   }
 
@@ -780,362 +809,27 @@ export const getRangeSchedule = async (userId: string, startDate: Date, endDate:
     return scheduleMap;
 };
 
-// Helper to commit new schedules to Firestore
-const commitNewSchedules = async (
-  userId: string,
-  planId: string,
-  todayStr: string,
-  newSchedules: Map<string, any[]>,
-  snapshot: any
-): Promise<number> => {
-  let batch = writeBatch(db);
-  let opCount = 0;
-
-  const commitBatch = async () => {
-    if (opCount > 0) {
-      await batch.commit();
-      batch = writeBatch(db);
-      opCount = 0;
-    }
+/**
+ * Reschedule overdue tasks starting from today.
+ * @param userId 
+ * @param planId 
+ * @param routine 
+ * @param preserveToday If true, keeps tasks already scheduled for today.
+ * @param todayStrOverride Optional override for today's date string (YYYY-MM-DD).
+ */
+export const rescheduleOverdueTasks = async (
+  userId: string, 
+  planId: string, 
+  routine: any, 
+  preserveToday: boolean = false,
+  todayStrOverride?: string
+): Promise<any> => {
+  console.warn("ALERTA: O motor de replanejamento de atrasos foi desativado e removido para reconstrução estrutural.");
+  // Retorne o padrão de sucesso esperado pelo sistema para não travar o botão do usuário
+  return { 
+    success: true, 
+    message: "A funcionalidade de replanejamento está passando por uma manutenção estrutural." 
   };
-
-  // 1. Limpa documentos antigos e deleta os que ficaram vazios
-  for (const docSnap of snapshot.docs) {
-    const dateStr = docSnap.id;
-    if (dateStr < todayStr) {
-      const data = docSnap.data();
-      const items = data.items || [];
-      const remaining = items.filter((i: any) => 
-        i.planId !== planId || 
-        i.status !== 'pending' || 
-        i.isSpacedReview || 
-        i.type?.toLowerCase() === 'simulado' || 
-        i.isFixed
-      );
-      
-      if (remaining.length === 0) {
-        batch.delete(docSnap.ref);
-      } else {
-        batch.set(docSnap.ref, cleanObject({ date: dateStr, items: remaining }));
-      }
-    } else {
-      batch.delete(docSnap.ref);
-    }
-    opCount++;
-    if (opCount >= 450) await commitBatch();
-  }
-
-  // 2. Grava os novos documentos
-  for (const [dateStr, items] of newSchedules.entries()) {
-    const docRef = doc(db, 'users', userId, 'schedules', dateStr);
-    batch.set(docRef, cleanObject({ date: dateStr, items }));
-    opCount++;
-    if (opCount >= 450) await commitBatch();
-  }
-
-  await commitBatch();
-  return opCount;
-};
-
-const rescheduleContinuousEngine = async (
-  userId: string,
-  planId: string,
-  routine: any,
-  todayStr: string,
-  tasksToShift: any[],
-  fixedTasksByDate: Map<string, any[]>,
-  timeStudiedToday: Map<string, number>,
-  snapshot: any
-) => {
-  console.log(`[Motor Contínuo] Iniciando empuxo fluido para usuário ${userId}`);
-  
-  const safeRoutine = Array.isArray(routine) 
-    ? routine 
-    : [0, 1, 2, 3, 4, 5, 6].map(day => Number(routine?.[day]) || 0);
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const newSchedules = new Map<string, any[]>();
-
-  for (const [date, items] of fixedTasksByDate.entries()) {
-    if (date >= todayStr) newSchedules.set(date, [...items]);
-  }
-
-  const getDayBaseCapacity = (date: Date) => {
-    const dStr = getLocalDataString(date);
-    const dayIdx = date.getDay();
-    const baseCap = safeRoutine[dayIdx] || 0;
-    const fixedItems = newSchedules.get(dStr) || [];
-    const occupiedByFixed = fixedItems.reduce((acc, i) => acc + (i.calculatedDuration || i.duration || 0), 0);
-    return Math.max(0, baseCap - occupiedByFixed);
-  };
-
-  const getRealDayCapacity = (date: Date) => {
-    let capacity = getDayBaseCapacity(date);
-    const dStr = getLocalDataString(date);
-    if (dStr === todayStr) capacity -= (timeStudiedToday.get(todayStr) || 0);
-    return Math.max(0, capacity);
-  };
-
-  const currentDate = new Date(today);
-  let realDayCapacity = getRealDayCapacity(currentDate);
-
-  for (const task of tasksToShift) {
-    let remainingTimeOfTask = task.calculatedDuration || task.duration || 0;
-    let partIndex = 1;
-
-    while (remainingTimeOfTask > 0) {
-      if (realDayCapacity <= 0) {
-        currentDate.setDate(currentDate.getDate() + 1);
-        realDayCapacity = getRealDayCapacity(currentDate);
-        continue; 
-      }
-      
-      const dStr = getLocalDataString(currentDate);
-      const timeToAllocate = Math.min(remainingTimeOfTask, realDayCapacity);
-      
-      const slice = {
-        ...task,
-        date: dStr,
-        duration: timeToAllocate,
-        calculatedDuration: timeToAllocate,
-        part: (remainingTimeOfTask > timeToAllocate || partIndex > 1) ? partIndex : undefined,
-        willSplit: remainingTimeOfTask > timeToAllocate
-      };
-
-      if (!newSchedules.has(dStr)) newSchedules.set(dStr, []);
-      newSchedules.get(dStr)!.push(slice);
-      
-      remainingTimeOfTask -= timeToAllocate;
-      realDayCapacity -= timeToAllocate;
-      if (remainingTimeOfTask > 0) partIndex++;
-    }
-  }
-
-  return await commitNewSchedules(userId, planId, todayStr, newSchedules, snapshot);
-};
-
-const rescheduleRotativeEngine = async (
-  userId: string,
-  planId: string,
-  routine: any,
-  todayStr: string,
-  overdueTasks: any[],
-  futurePendingTasks: any[],
-  fixedTasksByDate: Map<string, any[]>,
-  timeStudiedToday: Map<string, number>,
-  snapshot: any
-) => {
-  console.log(`[Motor Rotativo] Iniciando empuxo total para usuário ${userId}`);
-
-  // 1. Preparação da Fila de Empuxo (Push Effect)
-  const allTasksToSchedule = [...overdueTasks, ...futurePendingTasks].sort((a, b) => 
-    (a.cycleOrder || 0) - (b.cycleOrder || 0) || 
-    (a.disciplineOrder || 0) - (b.disciplineOrder || 0) || 
-    (a.subjectOrder || 0) - (b.subjectOrder || 0) || 
-    (a.order || 0) - (b.order || 0)
-  );
-
-  if (allTasksToSchedule.length === 0) return 0;
-
-  // 2. Normalização da Rotina
-  const safeRoutine = Array.isArray(routine) 
-    ? routine 
-    : [0, 1, 2, 3, 4, 5, 6].map(day => Number(routine?.[day]) || 0);
-
-  // 3. Sincronização de Data e Índice
-  const now = new Date();
-  const currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  // Garanta que o getDay() do JS (Dom=0) se alinhe com o array do DB (ex: Seg=0)
-  const getRoutineIndex = (date: Date) => date.getDay() === 0 ? 6 : date.getDay() - 1;
-
-  const newSchedules = new Map<string, any[]>();
-  for (const [date, items] of fixedTasksByDate.entries()) {
-    if (date >= todayStr) newSchedules.set(date, [...items]);
-  }
-
-  const getDayBaseCapacity = (date: Date) => {
-    const dStr = getLocalDataString(date);
-    const dayIdx = getRoutineIndex(date);
-    const baseCap = safeRoutine[dayIdx] || 0;
-    
-    const fixedItems = newSchedules.get(dStr) || [];
-    const occupiedByFixed = fixedItems.reduce((acc, i) => acc + (i.calculatedDuration || i.duration || 0), 0);
-    
-    return Math.max(0, baseCap - occupiedByFixed);
-  };
-
-  const getRealDayCapacity = (date: Date) => {
-    let capacity = getDayBaseCapacity(date);
-    const dStr = getLocalDataString(date);
-    if (dStr === todayStr) {
-      capacity -= (timeStudiedToday.get(todayStr) || 0);
-    }
-    return Math.max(0, capacity);
-  };
-
-  // 4. O Loop de Alocação (Motor de Bloco Intacto & No-Gap)
-  for (const task of allTasksToSchedule) {
-    let taskRemaining = task.calculatedDuration || task.duration || 0;
-    let partIndex = 1;
-
-    while (taskRemaining > 0) {
-      // 1. Busca a capacidade MAXIMA do dia na rotina e o saldo RESTANTE
-      const dailyMaxCap = getDayBaseCapacity(currentDate);
-      const remainingCap = getRealDayCapacity(currentDate);
-
-      if (remainingCap <= 0) {
-        currentDate.setDate(currentDate.getDate() + 1); // Avança para o próximo dia e repete
-        continue;
-      }
-
-      const dStr = getLocalDataString(currentDate);
-
-      if (taskRemaining <= remainingCap) {
-        // CENÁRIO A: A meta cabe perfeitamente no tempo restante de hoje.
-        const timeToAllocate = taskRemaining;
-        const slice = {
-          ...task,
-          date: dStr,
-          duration: timeToAllocate,
-          calculatedDuration: timeToAllocate,
-          part: partIndex > 1 ? partIndex : undefined,
-          willSplit: false
-        };
-
-        if (!newSchedules.has(dStr)) newSchedules.set(dStr, []);
-        newSchedules.get(dStr)!.push(slice);
-        
-        taskRemaining = 0;
-      } 
-      else if (taskRemaining > dailyMaxCap) {
-        // CENÁRIO B: A meta é GIGANTE, maior que a carga horária de um dia inteiro. FATIAMENTO OBRIGATÓRIO.
-        const timeToAllocate = remainingCap;
-        const slice = {
-          ...task,
-          date: dStr,
-          duration: timeToAllocate,
-          calculatedDuration: timeToAllocate,
-          part: partIndex,
-          willSplit: true
-        };
-
-        if (!newSchedules.has(dStr)) newSchedules.set(dStr, []);
-        newSchedules.get(dStr)!.push(slice);
-
-        taskRemaining -= timeToAllocate;
-        partIndex++;
-        currentDate.setDate(currentDate.getDate() + 1); // Dia lotou, vai pro próximo
-      } 
-      else {
-        // CENÁRIO C: A meta cabe em um dia normal, mas NÃO CABE no tempo que sobrou de hoje.
-        // PROTEÇÃO DE BLOCO ROTATIVO: Não fatie. Encerre o dia de hoje mais cedo e jogue a meta inteira para amanhã.
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-    }
-  }
-
-  // 5. Gravação em Lotes (Batch)
-  return await commitNewSchedules(userId, planId, todayStr, newSchedules, snapshot);
-};
-
-export const rescheduleOverdueTasks = async (userId: string, planId: string, routine: any, preserveToday: boolean = false): Promise<number> => {
-  console.log(`[Replanejamento] Iniciando roteamento para usuário ${userId}, plano ${planId}`);
-
-  // 1. Ponto de Partida e Fuso Horário (Local Time)
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayStr = getLocalDataString(today);
-
-  // 2. Coleta de Dados
-  const plan = await getPlanById(planId);
-  const cycleSystem = plan?.cycleSystem?.toUpperCase();
-
-  const schedulesRef = collection(db, 'users', userId, 'schedules');
-  const snapshot = await getDocs(schedulesRef);
-  
-  const overdueTasks: any[] = [];
-  const futurePendingTasks: any[] = [];
-  const fixedTasksByDate = new Map<string, any[]>();
-  const timeStudiedToday = new Map<string, number>();
-
-  const sortedDocs = [...snapshot.docs].sort((a, b) => a.id.localeCompare(b.id));
-
-  for (const docSnap of sortedDocs) {
-    const dateStr = docSnap.id;
-    const data = docSnap.data();
-    const items = data.items || [];
-
-    const fixed: any[] = [];
-    for (const item of items) {
-      const isTargetPlan = item.planId === planId;
-      const isPending = item.status === 'pending';
-      const isSpecial = item.isSpacedReview || item.type?.toLowerCase() === 'simulado' || item.isFixed;
-
-      if (isTargetPlan && isPending && !isSpecial) {
-        if (dateStr < todayStr) {
-          overdueTasks.push(item);
-        } else if (dateStr === todayStr && preserveToday) {
-          fixed.push(item);
-        } else {
-          futurePendingTasks.push(item);
-        }
-      } else {
-        fixed.push(item);
-      }
-
-      if (dateStr === todayStr) {
-        const studied = Number(item.recordedMinutes || 0);
-        timeStudiedToday.set(todayStr, (timeStudiedToday.get(todayStr) || 0) + studied);
-      }
-    }
-
-    if (fixed.length > 0) {
-      fixedTasksByDate.set(dateStr, fixed);
-    }
-  }
-
-  // 3. Bifurcação de Motores
-  if (cycleSystem === 'ROTATIVE') {
-    // 3.1 Enriquecimento Hierárquico (Garantia de Ordem para Ciclo Rotativo)
-    // Buscamos as ordens das disciplinas para garantir que o sort absoluto funcione
-    const discSnap = await getDocs(query(collection(db, 'plans', planId, 'disciplines'), orderBy('order')));
-    const discOrderMap = new Map();
-    discSnap.docs.forEach((d, i) => discOrderMap.set(d.id, d.data().order ?? i));
-
-    const cycleOrderMap = new Map();
-    (plan.cycles || []).forEach((c: any, i: number) => cycleOrderMap.set(c.id, c.order ?? i));
-
-    const enrichTask = (t: any) => ({
-      ...t,
-      cycleOrder: cycleOrderMap.get(t.cycleId) || 0,
-      disciplineOrder: discOrderMap.get(t.subjectId) || 0,
-      // subjectOrder e order já devem vir no objeto da meta se o agendamento original foi correto
-      subjectOrder: t.subjectOrder || 0,
-      order: t.order || 0
-    });
-
-    return await rescheduleRotativeEngine(
-      userId, 
-      planId, 
-      routine, 
-      todayStr, 
-      overdueTasks.map(enrichTask), 
-      futurePendingTasks.map(enrichTask), 
-      fixedTasksByDate, 
-      timeStudiedToday, 
-      snapshot
-    );
-  } else {
-    // Motor legado intacto (Empuxo Fluido)
-    const tasksToShift = [...overdueTasks, ...futurePendingTasks];
-    if (tasksToShift.length === 0) return 0;
-    
-    return await rescheduleContinuousEngine(
-      userId, planId, routine, todayStr, tasksToShift, fixedTasksByDate, timeStudiedToday, snapshot
-    );
-  }
 };
 
 

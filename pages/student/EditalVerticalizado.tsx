@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { 
   FileText, Loader2, ChevronDown, ChevronUp, CheckCircle2, Layout, BookOpen, X 
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getEdict, EdictStructure } from '../../services/edictService';
 import { getStudentConfig, getStudentCompletedMetas, toggleGoalStatus } from '../../services/studentService';
@@ -13,6 +14,8 @@ import { useEditalProgress } from '../../hooks/useEditalProgress';
 
 const EditalVerticalizado: React.FC = () => {
   const { currentUser } = useAuth();
+  const [searchParams] = useSearchParams();
+  const focusTopicId = searchParams.get('focusTopicId');
   
   // Data State
   const [structure, setStructure] = useState<EdictStructure | null>(null);
@@ -85,6 +88,42 @@ const EditalVerticalizado: React.FC = () => {
 
     init();
   }, [currentUser]);
+
+  // === AUTO-EXPAND FOR FOCUS TOPIC ===
+  useEffect(() => {
+    if (focusTopicId && structure) {
+        // Find discipline containing the topic
+        const discipline = structure.disciplines.find(d => 
+            d.topics.some(t => {
+                const check = (topic: any): boolean => {
+                    if (String(topic.id) === String(focusTopicId)) return true;
+                    if (topic.subtopics) return topic.subtopics.some(check);
+                    return false;
+                };
+                return check(t);
+            })
+        );
+
+        if (discipline) {
+            setExpandedDisciplines(prev => {
+                const newSet = new Set(prev);
+                newSet.add(discipline.id);
+                return newSet;
+            });
+
+            // Scroll to element
+            setTimeout(() => {
+                const el = document.getElementById(`topic-${focusTopicId}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Highlight effect
+                    el.classList.add('bg-brand-red/10');
+                    setTimeout(() => el.classList.remove('bg-brand-red/10'), 3000);
+                }
+            }, 800);
+        }
+    }
+  }, [focusTopicId, structure]);
 
   // === HANDLERS ===
 
@@ -272,6 +311,8 @@ const EditalVerticalizado: React.FC = () => {
                                                 activeUserMode={activeUserMode}
                                                 metaLookup={metaLookup}
                                                 planId={planId} // Pass ID
+                                                disciplineId={discipline.id} // NOVO
+                                                disciplineName={discipline.name} // NOVO
                                                 studyLevels={structure.studyLevels} // PASSING STUDY LEVELS
                                                 onToggleGoal={handleToggleGoal}
                                                 onBatchToggle={handleBatchToggle} // NEW: PASS BATCH TOGGLE

@@ -18,6 +18,8 @@ interface PandaVideo {
   folderId?: string | null;
   video_player_url?: string;
   embed_url?: string;
+  external_id?: string | null;
+  playback_id?: string | null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -88,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     strictVideos.sort((a, b) => (a.title || a.name || '').localeCompare(b.title || b.name || ''));
 
-    const videos = strictVideos.map((v: any) => ({
+    const videos = strictVideos.map((v: PandaVideo) => ({
       id: v.id,
       video_id: v.video_id || v.id,
       panda_id: v.video_id || v.id,

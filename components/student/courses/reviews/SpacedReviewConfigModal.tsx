@@ -1,16 +1,17 @@
 
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, CalendarClock, RotateCw } from 'lucide-react';
+import { X, CalendarClock, RotateCw, Trophy } from 'lucide-react';
 
 interface SpacedReviewConfigModalProps {
   isOpen: boolean;
   topicName: string;
   onClose: () => void;
   onSave: (intervals: number[], repeatLast: boolean) => void;
+  isAutoTriggered?: boolean;
 }
 
-export function SpacedReviewConfigModal({ isOpen, topicName, onClose, onSave }: SpacedReviewConfigModalProps) {
+export function SpacedReviewConfigModal({ isOpen, topicName, onClose, onSave, isAutoTriggered }: SpacedReviewConfigModalProps) {
   const [inputValue, setInputValue] = useState('1, 7, 15, 30');
   const [repeatLast, setRepeatLast] = useState(false);
   const [error, setError] = useState('');
@@ -56,8 +57,20 @@ export function SpacedReviewConfigModal({ isOpen, topicName, onClose, onSave }: 
 
         {/* Corpo */}
         <div className="p-6 space-y-6">
+          {isAutoTriggered && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex items-center gap-4 animate-in slide-in-from-top-2 duration-500">
+                <div className="w-10 h-10 rounded-full bg-emerald-500 text-black flex items-center justify-center shrink-0 shadow-lg shadow-emerald-900/20">
+                    <Trophy size={20} />
+                </div>
+                <div>
+                    <h4 className="text-emerald-400 font-black uppercase text-xs tracking-widest">Parabéns!</h4>
+                    <p className="text-[10px] text-emerald-500/80 uppercase font-bold leading-tight">Você concluiu este tópico. Deseja agendar suas revisões agora?</p>
+                </div>
+            </div>
+          )}
+
           <div>
-            <p className="text-xs text-gray-400 mb-2 font-bold uppercase tracking-wider">Você concluiu o tópico:</p>
+            <p className="text-xs text-gray-400 mb-2 font-bold uppercase tracking-wider">Tópico:</p>
             <p className="text-sm font-black text-white uppercase bg-black p-3 rounded border border-gray-800 leading-tight">
                 {topicName}
             </p>

@@ -24,6 +24,7 @@ import { StudentLiveEventRoom } from './pages/student/liveEvents/StudentLiveEven
 import AdminLayout from './components/Layout/AdminLayout';
 import StudentLayout from './components/Layout/StudentLayout';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SpacedReviewModalProvider } from './contexts/SpacedReviewModalContext';
 import PrivateRoute from './components/PrivateRoute';
 
 // Student Pages Imports
@@ -51,78 +52,80 @@ const RootRedirect = () => {
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <Toaster position="top-right" />
-      <Routes>
-        <Route path="/migracao/:token" element={<MigrationEnrollment />} />
-        <Route path="/login" element={<LoginPage />} />
-        
-        {/* Admin Routes */}
-        <Route path="/admin/eventos-ao-vivo/sala/:id" element={
-            <PrivateRoute requiredRole="ADMIN">
-                <AdminLiveRoom />
-            </PrivateRoute>
-        } />
+      <SpacedReviewModalProvider>
+        <Toaster position="top-right" />
+        <Routes>
+          <Route path="/migracao/:token" element={<MigrationEnrollment />} />
+          <Route path="/login" element={<LoginPage />} />
+          
+          {/* Admin Routes */}
+          <Route path="/admin/eventos-ao-vivo/sala/:id" element={
+              <PrivateRoute requiredRole="ADMIN">
+                  <AdminLiveRoom />
+              </PrivateRoute>
+          } />
 
-        <Route path="/admin" element={
-            <PrivateRoute requiredRole="ADMIN">
-                <AdminLayout />
-            </PrivateRoute>
-        }>
-            <Route index element={<Navigate to="planos" replace />} />
-            <Route path="planos" element={<PlansPage />} />
-            <Route path="plans/:planId" element={<PlanEditor />} />
-            
-            <Route path="products" element={<ProductsManager />} />
+          <Route path="/admin" element={
+              <PrivateRoute requiredRole="ADMIN">
+                  <AdminLayout />
+              </PrivateRoute>
+          }>
+              <Route index element={<Navigate to="planos" replace />} />
+              <Route path="planos" element={<PlansPage />} />
+              <Route path="plans/:planId" element={<PlanEditor />} />
+              
+              <Route path="products" element={<ProductsManager />} />
 
-            <Route path="cursos" element={<AdminCoursesTab />} /> {/* Nova Rota */}
+              <Route path="cursos" element={<AdminCoursesTab />} /> {/* Nova Rota */}
 
-            <Route path="presencial" element={<PresentialClassesPage />} /> {/* Nova Rota Presencial */}
-            <Route path="presencial/:classId" element={<PresentialClassManager />} />
+              <Route path="presencial" element={<PresentialClassesPage />} /> {/* Nova Rota Presencial */}
+              <Route path="presencial/:classId" element={<PresentialClassManager />} />
 
-            <Route path="alunos" element={<StudentManager />} />
-            
-            <Route path="simulados" element={<SimulatedExamsManager />} />
-            <Route path="simulados/:classId" element={<SimulatedClassDetails />} />
-            
-            <Route path="eventos-ao-vivo" element={<AdminLiveEvents />} />
-            <Route path="eventos-ao-vivo/:eventId" element={<AdminLiveEventDetails />} />
-            
-            <Route path="equipe" element={<TeamManager />} />
-            
-            <Route path="manutencao" element={<Maintenance />} />
-        </Route>
+              <Route path="alunos" element={<StudentManager />} />
+              
+              <Route path="simulados" element={<SimulatedExamsManager />} />
+              <Route path="simulados/:classId" element={<SimulatedClassDetails />} />
+              
+              <Route path="eventos-ao-vivo" element={<AdminLiveEvents />} />
+              <Route path="eventos-ao-vivo/:eventId" element={<AdminLiveEventDetails />} />
+              
+              <Route path="equipe" element={<TeamManager />} />
+              
+              <Route path="manutencao" element={<Maintenance />} />
+          </Route>
 
-        {/* Student Routes */}
-        <Route path="/app" element={
-            <PrivateRoute requiredRole="STUDENT">
-                <StudentLayout />
-            </PrivateRoute>
-        }>
-            <Route index element={<Navigate to="home" replace />} />
-            <Route path="home" element={<StudentHome />} />
-            <Route path="dashboard" element={<StudentDashboard />} />
-            <Route path="calendar" element={<StudentCalendar />} />
-            <Route path="edict" element={<StudentEdict />} />
-            <Route path="simulated" element={<StudentSimulated />} />
-            <Route path="courses/:courseId?" element={<StudentCoursesTab />} />
-            <Route path="presential" element={<StudentPresentialTab />} />
-            <Route path="presential/:classId" element={<StudentPresentialDetails />} />
-            <Route path="eventos-ao-vivo" element={<StudentLiveEvents />} />
-            <Route path="eventos-ao-vivo/sala/:eventId" element={<StudentLiveEventRoom />} />
-            <Route path="config" element={<StudentConfigPage />} />
-            
-            {/* Fallback for old routes if any */}
-            <Route path="metas" element={<Navigate to="dashboard" replace />} />
-            <Route path="calendario" element={<Navigate to="calendar" replace />} />
-            <Route path="edital" element={<Navigate to="edict" replace />} />
-        </Route>
+          {/* Student Routes */}
+          <Route path="/app" element={
+              <PrivateRoute requiredRole="STUDENT">
+                  <StudentLayout />
+              </PrivateRoute>
+          }>
+              <Route index element={<Navigate to="home" replace />} />
+              <Route path="home" element={<StudentHome />} />
+              <Route path="dashboard" element={<StudentDashboard />} />
+              <Route path="calendar" element={<StudentCalendar />} />
+              <Route path="edict" element={<StudentEdict />} />
+              <Route path="simulated" element={<StudentSimulated />} />
+              <Route path="courses/:courseId?" element={<StudentCoursesTab />} />
+              <Route path="presential" element={<StudentPresentialTab />} />
+              <Route path="presential/:classId" element={<StudentPresentialDetails />} />
+              <Route path="eventos-ao-vivo" element={<StudentLiveEvents />} />
+              <Route path="eventos-ao-vivo/sala/:eventId" element={<StudentLiveEventRoom />} />
+              <Route path="config" element={<StudentConfigPage />} />
+              
+              {/* Fallback for old routes if any */}
+              <Route path="metas" element={<Navigate to="dashboard" replace />} />
+              <Route path="calendario" element={<Navigate to="calendar" replace />} />
+              <Route path="edital" element={<Navigate to="edict" replace />} />
+          </Route>
 
-        {/* Root Redirect */}
-        <Route path="/" element={<RootRedirect />} />
-        
-        {/* Catch all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* Root Redirect */}
+          <Route path="/" element={<RootRedirect />} />
+          
+          {/* Catch all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </SpacedReviewModalProvider>
     </AuthProvider>
   );
 };

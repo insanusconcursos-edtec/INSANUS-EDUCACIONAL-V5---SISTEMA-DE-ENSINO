@@ -25,6 +25,41 @@ try {
   console.error("Crash no Firebase Init:", error);
 }
 
+interface CourseAccess {
+  id?: string;
+  type: string;
+  targetId: string;
+  isActive?: boolean;
+  endDate?: any;
+  startDate?: any;
+}
+
+interface UserProfile {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userPhone: string;
+  userCpf: string;
+  userAvatar: string;
+  enrollmentType?: string;
+  accessOrigin?: string;
+  expiresAt?: string | null;
+  releasedAt?: string | null;
+  active?: boolean;
+  createdAt?: any;
+}
+
+interface Enrollment {
+  id: string;
+  userId?: string;
+  enrollmentType?: string;
+  expiresAt?: any;
+  releasedAt?: any;
+  createdAt?: any;
+  active?: boolean;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -55,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .where('role', '==', 'student')
       .get();
 
-    const studentMap = new Map<string, any>();
+    const studentMap = new Map<string, UserProfile>();
 
     // Parte A: Processar alunos que ganharam acesso via Combo/Produto
     studentsSnap.docs.forEach(doc => {
@@ -63,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const accessArray = userData.access || [];
       
       // Verifica se existe um item de acesso do tipo 'course' para este courseId e que esteja ativo
-      const courseAccess = accessArray.find((acc: any) => 
+      const courseAccess = accessArray.find((acc: CourseAccess) => 
         acc.type === 'course' && 
         acc.targetId === courseId && 
         acc.isActive === true
@@ -88,8 +123,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     // Parte B: Processar Matrículas Diretas (Sobrescrevendo ou complementando)
-    for (const enrollment of directEnrollments) {
-      const userId = (enrollment as any).userId;
+    for (const rawEnrollment of directEnrollments) {
+      const enrollment = rawEnrollment as Enrollment;
+      const userId = enrollment.userId;
       if (!userId) continue;
 
       let userProfile = studentMap.get(userId);
@@ -131,11 +167,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (userProfile) {
         studentMap.set(userId, {
           ...userProfile,
-          enrollmentType: (enrollment as any).enrollmentType || 'REGULAR',
+          enrollmentType: enrollment.enrollmentType || 'REGULAR',
           accessOrigin: 'DIRECT',
-          expiresAt: (enrollment as any).expiresAt ? ((enrollment as any).expiresAt.toDate ? (enrollment as any).expiresAt.toDate().toISOString() : (enrollment as any).expiresAt) : null,
-          releasedAt: (enrollment as any).releasedAt ? ((enrollment as any).releasedAt.toDate ? (enrollment as any).releasedAt.toDate().toISOString() : (enrollment as any).releasedAt) : ((enrollment as any).createdAt ? ((enrollment as any).createdAt.toDate ? (enrollment as any).createdAt.toDate().toISOString() : (enrollment as any).createdAt) : (userProfile.createdAt?.toDate ? userProfile.createdAt.toDate().toISOString() : userProfile.createdAt)),
-          active: (enrollment as any).active !== false
+          expiresAt: enrollment.expiresAt ? (enrollment.expiresAt.toDate ? enrollment.expiresAt.toDate().toISOString() : enrollment.expiresAt) : null,
+          releasedAt: enrollment.releasedAt ? (enrollment.releasedAt.toDate ? enrollment.releasedAt.toDate().toISOString() : enrollment.releasedAt) : (enrollment.createdAt ? (enrollment.createdAt.toDate ? enrollment.createdAt.toDate().toISOString() : enrollment.createdAt) : (userProfile.createdAt?.toDate ? userProfile.createdAt.toDate().toISOString() : userProfile.createdAt)),
+          active: enrollment.active !== false
         });
       }
     }

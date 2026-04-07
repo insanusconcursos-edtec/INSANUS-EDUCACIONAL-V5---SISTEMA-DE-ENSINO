@@ -5,8 +5,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { togglePlanPause, resetPlanStats, resetUnlockedSimulados } from '../../../services/studentService';
-import { resetStudentSchedule, rescheduleOverdueTasks, generateSchedule } from '../../../services/scheduleService';
+import { resetStudentSchedule, generateSchedule } from '../../../services/scheduleService';
 import { editalProgressService } from '../../../services/editalProgressService';
+import { courseReviewService } from '../../../services/courseReviewService';
 import { getStudentConfig } from '../../../services/studentService';
 import ConfirmationModal from '../../ui/ConfirmationModal';
 
@@ -21,9 +22,7 @@ const PlanControlPanel: React.FC<PlanControlPanelProps> = ({ planId, isPaused, o
   
   // Loading States
   const [isPausing, setIsPausing] = useState(false);
-  const [isRescheduling, setIsRescheduling] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const [rescheduleCount, setRescheduleCount] = useState<number | null>(null);
 
   // Modal States
   const [resetModalOpen, setResetModalOpen] = useState(false);
@@ -43,25 +42,6 @@ const PlanControlPanel: React.FC<PlanControlPanelProps> = ({ planId, isPaused, o
     }
   };
 
-  const handleReschedule = async () => {
-    if (!currentUser) return;
-    setIsRescheduling(true);
-    try {
-        const config = await getStudentConfig(currentUser.uid);
-        if (config && config.routine) {
-            const count = await rescheduleOverdueTasks(currentUser.uid, planId, config.routine);
-            setRescheduleCount(count);
-            setTimeout(() => setRescheduleCount(null), 3000); // Clear success msg
-            onRefresh();
-        }
-    } catch (error) {
-        console.error(error);
-        alert("Erro ao replanejar atrasos.");
-    } finally {
-        setIsRescheduling(false);
-    }
-  };
-
   const handleReset = async () => {
     if (!currentUser) return;
     setIsResetting(true);
@@ -78,7 +58,10 @@ const PlanControlPanel: React.FC<PlanControlPanelProps> = ({ planId, isPaused, o
         // 4. Reset Unlocked Simulados
         await resetUnlockedSimulados(currentUser.uid, planId);
 
-        // 5. Regenerate
+        // 5. Delete Spaced Reviews
+        await courseReviewService.deleteReviewsByPlan(currentUser.uid, planId);
+
+        // 6. Regenerate
         const config = await getStudentConfig(currentUser.uid);
         if (config) {
             await generateSchedule(currentUser.uid, planId, config.studyProfile, config.routine);
@@ -127,34 +110,6 @@ const PlanControlPanel: React.FC<PlanControlPanelProps> = ({ planId, isPaused, o
              </h4>
              <p className="text-[10px] text-zinc-400 mt-1 leading-tight">
                 {isPaused ? 'Voltar a receber metas diárias.' : 'Congelar cronograma temporariamente.'}
-             </p>
-          </div>
-        </button>
-
-        {/* BUTTON B: RESCHEDULE */}
-        <button
-          onClick={handleReschedule}
-          disabled={isRescheduling || isPaused}
-          className={`
-            relative overflow-hidden group p-4 rounded-xl border border-blue-500/50 bg-blue-900/20 hover:bg-blue-900/40 transition-all text-left flex flex-col justify-between h-28 disabled:opacity-50 disabled:cursor-not-allowed
-          `}
-        >
-          <div className="flex justify-between items-start w-full">
-             <div className="p-2 rounded-lg bg-blue-500 text-white">
-                {isRescheduling ? <Loader2 size={20} className="animate-spin" /> : <CalendarClock size={20} />}
-             </div>
-             {rescheduleCount !== null && (
-                 <span className="text-[9px] font-bold bg-emerald-500 text-black px-2 py-1 rounded-full animate-in zoom-in">
-                    {rescheduleCount} Ajustados
-                 </span>
-             )}
-          </div>
-          <div>
-             <h4 className="text-sm font-black text-blue-400 uppercase">
-                Replanejar Atrasos
-             </h4>
-             <p className="text-[10px] text-zinc-400 mt-1 leading-tight">
-                Jogar pendências para frente (Empuxo).
              </p>
           </div>
         </button>

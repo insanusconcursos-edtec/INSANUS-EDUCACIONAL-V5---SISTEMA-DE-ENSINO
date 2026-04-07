@@ -14,7 +14,7 @@ import { openWatermarkedPdf } from '../../utils/pdfSecurityService';
 import VideoPlayerModal from './VideoPlayerModal';
 import MindMapViewerModal from './MindMapViewerModal';
 import FlashcardPlayerModal from './FlashcardPlayerModal';
-import { mergeGoalExtension, rescheduleOverdueTasks, getLocalISODate } from '../../services/scheduleService';
+import { mergeGoalExtension, getLocalISODate } from '../../services/scheduleService';
 import { registerStudySession, updateGoalRecordedTime, getStudentConfig } from '../../services/studentService';
 
 export type GoalType = 'lesson' | 'material' | 'questions' | 'law' | 'review' | 'summary' | 'simulado';
@@ -25,7 +25,9 @@ export interface StudentGoal {
   type: GoalType;
   title: string;
   discipline: string;
+  disciplineId?: string;
   topic: string;
+  topicId?: string;
   duration: number; // minutes
   multiplier?: number; // Multiplicative factor for repetitions
   isCompleted: boolean;
@@ -214,14 +216,6 @@ export const StudentGoalCard: React.FC<StudentGoalCardProps> = ({ goal, onStart,
         // 1. Execute Merge (DB Update)
         await mergeGoalExtension(currentUser.uid, goal.planId, eventPayload);
         
-        // 2. Trigger Reflow (Fix the Calendar Gap)
-        // Need to fetch routine first
-        const config = await getStudentConfig(currentUser.uid);
-        if (config && config.routine) {
-             // preserveToday = true ensures we don't mess up today's plan, only fill the gap tomorrow onwards
-             await rescheduleOverdueTasks(currentUser.uid, goal.planId, config.routine, true);
-        }
-
         if (onRefresh) onRefresh();
     } catch (error) {
         console.error(error);

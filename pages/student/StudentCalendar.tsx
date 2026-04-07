@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Layout, Loader2, PauseCircle, Grid, X, PlayCircle, ChevronDown, Trophy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Layout, Loader2, PauseCircle, Grid, X, PlayCircle, ChevronDown, Trophy, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getRangeSchedule, ScheduledEvent } from '../../services/scheduleService';
-import { getStudentConfig } from '../../services/studentService';
+import { getRangeSchedule, ScheduledEvent, generateSchedule, fetchFullPlanData } from '../../services/scheduleService';
+import { getStudentConfig, getStudentCompletedMetas } from '../../services/studentService';
+import toast from 'react-hot-toast';
 
 // Type Config for Visuals (Fallback)
 const TYPE_CONFIG: Record<string, { label: string; color: string; }> = {
@@ -224,6 +225,12 @@ const StudentCalendar: React.FC = () => {
 
   const [selectedDayData, setSelectedDayData] = useState<{ date: Date; goals: ScheduledEvent[] } | null>(null);
 
+  // Rolling Window State
+  const [lastScheduledDate, setLastScheduledDate] = useState<string | null>(null);
+  const [isPlanCompleted, setIsPlanCompleted] = useState(false);
+  const [isGeneratingNext, setIsGeneratingNext] = useState(false);
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
+
   const weekDays = useMemo(() => {
     const startOfWeek = new Date(currentDate);
     const day = startOfWeek.getDay();
@@ -289,6 +296,22 @@ const StudentCalendar: React.FC = () => {
 
         const data = await getRangeSchedule(currentUser.uid, start, end);
         const activePlanId = config?.currentPlanId;
+        setCurrentPlanId(activePlanId);
+        setLastScheduledDate(config?.lastScheduledDate);
+
+        // Check plan completion
+        if (activePlanId) {
+            const fullPlan = await fetchFullPlanData(activePlanId);
+            const completedIdsSet = await getStudentCompletedMetas(currentUser.uid, activePlanId);
+            
+            let totalMetas = 0;
+            fullPlan.disciplines?.forEach((disc: any) => {
+                disc.topics?.forEach((topic: any) => {
+                    totalMetas += (topic.metas?.length || 0);
+                });
+            });
+            setIsPlanCompleted(totalMetas > 0 && completedIdsSet.size >= totalMetas);
+        }
         
         // Sort each day's items to prioritize Spaced Reviews AND filter by activePlanId
         const sortedData: Record<string, ScheduledEvent[]> = {};
@@ -351,6 +374,22 @@ const StudentCalendar: React.FC = () => {
     return date.getDate() === today.getDate() &&
            date.getMonth() === today.getMonth() &&
            date.getFullYear() === today.getFullYear();
+  };
+
+  const handleGenerateNextWeeks = async () => {
+      if (!currentUser || !currentPlanId) return;
+      setIsGeneratingNext(true);
+      try {
+          await generateSchedule(currentUser.uid, currentPlanId);
+          toast.success("Próximas semanas geradas com sucesso!");
+          // Trigger re-fetch
+          setCurrentDate(new Date(currentDate)); 
+      } catch (error) {
+          console.error("Erro ao gerar próximas semanas:", error);
+          toast.error("Erro ao gerar próximas semanas.");
+      } finally {
+          setIsGeneratingNext(false);
+      }
   };
 
   const getDayName = (date: Date) => date.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
@@ -445,6 +484,32 @@ const StudentCalendar: React.FC = () => {
         </div>
       </div>
 
+      {/* CTA ROLLING WINDOW */}
+      {lastScheduledDate && !isPlanCompleted && new Date(lastScheduledDate) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) && (
+        <div className="mb-4 bg-gradient-to-r from-brand-red/20 to-transparent border border-brand-red/30 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+            <div className="flex items-center gap-3">
+                <div className="p-2 bg-brand-red/20 text-brand-red rounded-full">
+                    <Trophy size={20} />
+                </div>
+                <div>
+                    <h3 className="text-white font-black text-sm uppercase tracking-tighter">Ciclo Concluído!</h3>
+                    <p className="text-zinc-400 text-[10px] uppercase tracking-widest">Gere as próximas semanas para continuar.</p>
+                </div>
+            </div>
+            <button 
+                onClick={handleGenerateNextWeeks}
+                disabled={isGeneratingNext}
+                className="w-full md:w-auto px-4 py-2 bg-brand-red hover:bg-red-600 text-white font-black text-[10px] rounded-lg uppercase tracking-wider transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+                {isGeneratingNext ? (
+                    <><Loader2 className="w-3 h-3 animate-spin" /> Gerando...</>
+                ) : (
+                    <><RefreshCw className="w-3 h-3" /> Gerar Próximas Semanas</>
+                )}
+            </button>
+        </div>
+      )}
+
       {/* CALENDAR BODY */}
       <div className="flex-1 border border-zinc-800 rounded-2xl overflow-hidden bg-zinc-950 flex flex-col shadow-xl min-h-0">
         
@@ -527,6 +592,21 @@ const StudentCalendar: React.FC = () => {
                                             <span className="text-[9px] font-bold text-zinc-800 uppercase">Livre</span>
                                         </div>
                                     )}
+
+                                    {/* END OF PHASE MARKER */}
+                                    {dateKey === lastScheduledDate && (
+                                        <div className="mt-6 flex flex-col items-center w-full px-2 opacity-90 animate-in fade-in zoom-in-95 duration-500">
+                                            <div className="w-full h-px border-t border-dashed border-brand-red mb-3"></div>
+                                            <span className="text-[10px] text-brand-red font-orbitron font-bold text-center uppercase tracking-widest">
+                                                FIM DA FASE ATUAL
+                                            </span>
+                                            <span className="text-[9px] text-zinc-500 text-center mt-1 uppercase">
+                                                Conclua as metas para liberar a próxima fase
+                                            </span>
+                                            <div className="w-full h-px border-t border-dashed border-brand-red mt-3"></div>
+                                        </div>
+                                    )}
+
                                     {/* Spacer to prevent cut-off at bottom */}
                                     <div className="h-12 w-full flex-none" />
                                 </div>

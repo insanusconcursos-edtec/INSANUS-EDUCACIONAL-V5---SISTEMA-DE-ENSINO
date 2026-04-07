@@ -8,8 +8,10 @@ import {
 import toast from 'react-hot-toast';
 import { StudentGoalCard, StudentGoal } from '../../components/student/StudentGoalCard';
 import { getDashboardData, toggleGoalStatus, getStudentConfig, getStudentCompletedMetas, getLocalISODate, checkAndUnlockSimulados, getStudentPlans } from '../../services/studentService';
-import { rescheduleOverdueTasks, fetchFullPlanData, scheduleUserSimulado, anticipateAndShiftGoals } from '../../services/scheduleService';
+import { fetchFullPlanData, scheduleUserSimulado, anticipateAndShiftGoals, generateSchedule } from '../../services/scheduleService';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSpacedReviewModal } from '../../contexts/SpacedReviewModalContext';
+import { getEdict, EdictStructure } from '../../services/edictService';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import { SimuladoDashboardCard, ComputedSimulado } from '../../components/student/SimuladoDashboardCard';
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
@@ -17,14 +19,19 @@ import { db } from '../../services/firebase';
 import { getExams } from '../../services/simulatedService';
 import { SimuladoFocusMode } from '../../components/student/goals/SimuladoFocusMode';
 import StudentMentorshipViewer from '../../components/student/mentorship/StudentMentorshipViewer';
+import { CourseReviewDashboard } from '../../components/student/courses/reviews/CourseReviewDashboard';
+import { useNavigate } from 'react-router-dom';
 
 const StudentDashboard: React.FC = () => {
   const { currentUser } = useAuth();
+  const { triggerReviewModal } = useSpacedReviewModal();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const currentTab = searchParams.get('tab');
   
   // Data State
   const [todayGoals, setTodayGoals] = useState<StudentGoal[]>([]);
+  const [edictStructure, setEdictStructure] = useState<EdictStructure | null>(null);
   // Split Overdue State
   const [overdueReviews, setOverdueReviews] = useState<StudentGoal[]>([]);
   const [overdueGeneral, setOverdueGeneral] = useState<StudentGoal[]>([]);
@@ -32,10 +39,6 @@ const StudentDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [currentPlanId, setCurrentPlanId] = useState<string>('');
   const [isScholarship, setIsScholarship] = useState(false);
-
-  // Reschedule State
-  const [isRescheduling, setIsRescheduling] = useState(false);
-  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
 
   // Anticipation State
   const [showAnticipateModal, setShowAnticipateModal] = useState(false);
@@ -58,18 +61,29 @@ const StudentDashboard: React.FC = () => {
   // PASSO 2: NOVO ESTADO DE CONFIRMAÇÃO DE INÍCIO
   const [examToConfirm, setExamToConfirm] = useState<StudentGoal | null>(null);
 
+  // Rolling Window State
+  const [lastScheduledDate, setLastScheduledDate] = useState<string | null>(null);
+  const [isPlanCompleted, setIsPlanCompleted] = useState(false);
+  const [isGeneratingNext, setIsGeneratingNext] = useState(false);
+  const [completedMetaIds, setCompletedMetaIds] = useState<Set<string>>(new Set());
+
   // Fetch Data Function
   const fetchSchedule = async () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-        const { planId, overdue, today } = await getDashboardData(currentUser.uid);
+        const { planId, overdue, today, lastScheduledDate: fetchedLastDate } = await getDashboardData(currentUser.uid);
         setCurrentPlanId(planId);
+        setLastScheduledDate(fetchedLastDate);
 
         // Fetch Scholarship Status
-        const plans = await getStudentPlans(currentUser.uid);
+        const [plans, edict] = await Promise.all([
+            getStudentPlans(currentUser.uid),
+            getEdict(planId)
+        ]);
         const currentPlan = plans.find(p => p.id === planId);
         setIsScholarship(currentPlan?.isScholarship || false);
+        setEdictStructure(edict);
         
         // Helper Mapper
         const mapToGoal = (event: any): StudentGoal => ({
@@ -80,7 +94,9 @@ const StudentDashboard: React.FC = () => {
             type: event.type,
             title: event.title,
             discipline: event.disciplineName || event.discipline || 'Geral',
+            disciplineId: event.disciplineId,
             topic: event.topicName || event.subject || '',
+            topicId: event.topicId,
             duration: event.duration,
             multiplier: Number(event.multiplier || event.lawConfig?.multiplier || event.lawConfig?.speedFactor) || 1,
             recordedMinutes: event.recordedMinutes || 0, // NEW: Track actual time
@@ -151,6 +167,16 @@ const StudentDashboard: React.FC = () => {
           // B. Busca Metas Concluídas (Progress)
           // Isso inclui tanto as marcadas no calendário quanto as manuais
           const completedIdsSet = await getStudentCompletedMetas(uid, planId);
+          setCompletedMetaIds(completedIdsSet);
+
+          // Calculate total metas to check if plan is completed
+          let totalMetas = 0;
+          fullPlan.disciplines?.forEach((disc: any) => {
+              disc.topics?.forEach((topic: any) => {
+                  totalMetas += (topic.metas?.length || 0);
+              });
+          });
+          setIsPlanCompleted(totalMetas > 0 && completedIdsSet.size >= totalMetas);
 
           // C. Sincroniza desbloqueios pendentes
           await checkAndUnlockSimulados(uid, planId, undefined, fullPlan, completedIdsSet);
@@ -359,6 +385,21 @@ const StudentDashboard: React.FC = () => {
       }
   };
 
+  const handleGenerateNextWeeks = async () => {
+      if (!currentUser || !currentPlanId) return;
+      setIsGeneratingNext(true);
+      try {
+          await generateSchedule(currentUser.uid, currentPlanId);
+          toast.success("Próximas semanas geradas com sucesso!");
+          fetchSchedule();
+      } catch (error) {
+          console.error("Erro ao gerar próximas semanas:", error);
+          toast.error("Erro ao gerar próximas semanas.");
+      } finally {
+          setIsGeneratingNext(false);
+      }
+  };
+
   const checkAndTriggerAnticipation = async (updatedGoals: any[]) => {
     if (!currentUser) return;
     const pendingGoals = updatedGoals.filter(g => !g.isCompleted);
@@ -429,6 +470,60 @@ const StudentDashboard: React.FC = () => {
   };
 
   const { weekday, dayAndMonth } = getFormattedDate();
+  
+  const handleReviewNow = (topicId: string) => {
+    navigate(`/app/edict?focusTopicId=${topicId}`);
+  };
+
+  // Helper to find topic recursively (by topicId or metaId)
+  const findTargetTopic = (topicId: string | undefined, metaId: string | undefined, disciplines: any[]): { topic: any, discipline: any } | null => {
+    for (const disc of disciplines) {
+      const search = (items: any[]): any => {
+        for (const item of items) {
+          if (topicId && item.id === topicId) return item;
+          if (metaId && item.linkedGoals) {
+            const allIds = Object.values(item.linkedGoals).flat();
+            if (allIds.includes(metaId)) return item;
+          }
+          if (item.subtopics && item.subtopics.length > 0) {
+            const found = search(item.subtopics);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      const foundTopic = search(disc.topics);
+      if (foundTopic) return { topic: foundTopic, discipline: disc };
+    }
+    return null;
+  };
+
+  // Helper to count goals in a topic and its subtopics recursively
+  const getTopicGoalStats = (topic: any, completedIds: Set<string>) => {
+    let total = 0;
+    let completed = 0;
+
+    const processTopic = (t: any) => {
+      if (t.linkedGoals) {
+        Object.values(t.linkedGoals).forEach((ids: any) => {
+          if (Array.isArray(ids)) {
+            ids.forEach(id => {
+              if (id) {
+                total++;
+                if (completedIds.has(id)) completed++;
+              }
+            });
+          }
+        });
+      }
+      if (t.subtopics && t.subtopics.length > 0) {
+        t.subtopics.forEach(processTopic);
+      }
+    };
+
+    processTopic(topic);
+    return { total, completed };
+  };
 
   const handleToggleComplete = async (goalToToggle: StudentGoal) => {
     // 1. Encontra o estado ATUAL da meta na lista (antes da alteração)
@@ -483,24 +578,49 @@ const StudentDashboard: React.FC = () => {
         if (todayGoals.some(g => g.id === goalToToggle.id) && targetStatusBoolean) {
             checkAndTriggerAnticipation(novaListaDeMetasAtualizada);
         }
-    }
-  };
 
-  const handleReschedule = async () => {
-    if (!currentUser || !currentPlanId) return;
-    setIsRescheduling(true);
-    try {
-        const config = await getStudentConfig(currentUser.uid);
-        if (config && config.routine) {
-            await rescheduleOverdueTasks(currentUser.uid, currentPlanId, config.routine);
-            await fetchSchedule(); 
-            setShowRescheduleModal(false);
+        // Update local completed IDs set optimistically
+        const mId = goalToToggle.metaId || goalToToggle.id;
+        setCompletedMetaIds(prev => {
+            const next = new Set(prev);
+            if (targetStatusBoolean) {
+                next.add(mId);
+            } else {
+                next.delete(mId);
+            }
+            return next;
+        });
+
+        // NEW: Check for topic completion to trigger Spaced Review Modal (OPTIMISTIC)
+        if (targetStatusBoolean && (goalToToggle.topicId || goalToToggle.metaId) && edictStructure) {
+            try {
+                // 1. Optimistic Set (current state + the new completion)
+                const optimisticCompletedIds = new Set(completedMetaIds);
+                optimisticCompletedIds.add(mId);
+
+                // 2. Find the topic recursively
+                const result = findTargetTopic(goalToToggle.topicId, goalToToggle.metaId, edictStructure.disciplines);
+                
+                if (result) {
+                    const { topic, discipline } = result;
+                    // 3. Calculate topic progress using optimistic set
+                    const { total, completed } = getTopicGoalStats(topic, optimisticCompletedIds);
+
+                    // 4. If 100% complete, trigger modal immediately
+                    if (total > 0 && completed === total) {
+                        triggerReviewModal({
+                            planId: currentPlanId,
+                            disciplineId: discipline.id,
+                            disciplineName: discipline.name,
+                            topicId: topic.id,
+                            topicName: topic.name
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error("Error checking topic completion:", error);
+            }
         }
-    } catch (error) {
-        console.error(error);
-        alert("Erro ao replanejar.");
-    } finally {
-        setIsRescheduling(false);
     }
   };
 
@@ -515,7 +635,7 @@ const StudentDashboard: React.FC = () => {
       );
   }
 
-  if (loading && !isRescheduling) {
+  if (loading) {
       return (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
               <Loader2 size={40} className="animate-spin text-brand-red" />
@@ -544,6 +664,16 @@ const StudentDashboard: React.FC = () => {
               onClose={() => setIsExamMode(false)}
               onComplete={handleCompleteSimulado}
           />
+      )}
+
+      {/* REVISÕES ESPAÇADAS (NOVO SISTEMA) */}
+      {currentPlanId && (
+        <div className="mb-10">
+          <CourseReviewDashboard 
+            planId={currentPlanId} 
+            onReviewNow={handleReviewNow} 
+          />
+        </div>
       )}
 
       {/* HEADER */}
@@ -591,6 +721,32 @@ const StudentDashboard: React.FC = () => {
         )}
       </div>
 
+      {/* CTA ROLLING WINDOW */}
+      {lastScheduledDate && !isPlanCompleted && new Date(lastScheduledDate) < new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) && (
+        <div className="mb-8 bg-gradient-to-r from-brand-red/20 to-transparent border border-brand-red/30 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in slide-in-from-top-4">
+            <div className="flex items-center gap-4">
+                <div className="p-4 bg-brand-red/20 text-brand-red rounded-full">
+                    <Trophy size={28} />
+                </div>
+                <div>
+                    <h3 className="text-white font-black text-xl uppercase tracking-tighter">Parabéns! Você concluiu seu ciclo atual.</h3>
+                    <p className="text-zinc-400 text-sm mt-1">Suas metas agendadas estão acabando. Libere as próximas semanas para continuar evoluindo.</p>
+                </div>
+            </div>
+            <button 
+                onClick={handleGenerateNextWeeks}
+                disabled={isGeneratingNext}
+                className="w-full md:w-auto px-8 py-4 bg-brand-red hover:bg-red-600 text-white font-black text-sm rounded-xl uppercase tracking-wider transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+                {isGeneratingNext ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> Gerando...</>
+                ) : (
+                    <><RefreshCw className="w-5 h-5" /> Gerar Próximas Semanas</>
+                )}
+            </button>
+        </div>
+      )}
+
       {/* --- SEÇÃO 1: REVISÕES ESPAÇADAS --- */}
       <section className="mb-4">
         <div className={`rounded-2xl border overflow-hidden transition-all ${
@@ -614,15 +770,6 @@ const StudentDashboard: React.FC = () => {
                         </p>
                     </div>
                 </div>
-
-                {overdueReviews.length > 0 && (
-                    <button 
-                        onClick={() => setShowRescheduleModal(true)}
-                        className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-900/20 transition-all flex items-center gap-2 hover:scale-105"
-                    >
-                        <RefreshCw size={12} /> Replanejar Revisões
-                    </button>
-                )}
             </div>
 
             {/* List Body (Only if overdue) */}
@@ -664,15 +811,6 @@ const StudentDashboard: React.FC = () => {
                         </p>
                     </div>
                 </div>
-                
-                {overdueGeneral.length > 0 && (
-                    <button 
-                        onClick={() => setShowRescheduleModal(true)}
-                        className="px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg shadow-red-900/20"
-                    >
-                        <RefreshCw size={14} /> Replanejar Atrasos
-                    </button>
-                )}
             </div>
             
             {/* List Body (Only if overdue) */}
@@ -844,18 +982,6 @@ const StudentDashboard: React.FC = () => {
             </div>
         </div>
       )}
-
-      {/* MODAL CONFIRMAÇÃO REPLANEJAMENTO */}
-      <ConfirmationModal 
-        isOpen={showRescheduleModal}
-        onClose={() => setShowRescheduleModal(false)}
-        onConfirm={handleReschedule}
-        title="Replanejar Pendências?"
-        message="Atenção: Isso moverá TODAS as metas atrasadas (incluindo revisões) para hoje, empurrando o restante do cronograma para frente (Efeito Dominó). As revisões terão prioridade na nova agenda."
-        confirmText="Sim, Reorganizar Agenda"
-        variant="primary"
-        isLoading={isRescheduling}
-      />
 
       {/* MODAL DE ANTECIPAÇÃO (CELEBRAÇÃO) */}
       {showAnticipateModal && (

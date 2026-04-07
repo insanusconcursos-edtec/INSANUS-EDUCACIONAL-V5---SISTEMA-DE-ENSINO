@@ -40,9 +40,10 @@ import { getLocalISODate } from './scheduleService';
 export interface CourseReview {
   id: string;
   userId: string;
-  courseId: string;
+  courseId?: string; // Opcional para suportar Planos
+  planId?: string;   // Adicionado para suportar Planos
   disciplineId: string;
-  disciplineName: string; // <-- GARANTINDO QUE A INTERFACE ACEITA O NOME
+  disciplineName: string; 
   topicId: string;
   topicName: string;
   scheduledDate: string; 
@@ -60,13 +61,14 @@ export const courseReviewService = {
   // 1. Agenda as revisões com base nos intervalos
   scheduleReviews: async (
     userId: string, 
-    courseId: string, 
+    courseId: string | null, // Pode ser null se for Plano
     disciplineId: string, 
-    disciplineName: string, // <-- ADICIONADO AQUI
+    disciplineName: string, 
     topicId: string, 
     topicName: string, 
     intervals: number[], 
-    repeatLast: boolean
+    repeatLast: boolean,
+    planId?: string // Novo parâmetro opcional
   ) => {
     const batch = writeBatch(db);
     const reviewsRef = collection(db, 'users', userId, 'course_reviews');
@@ -84,9 +86,10 @@ export const courseReviewService = {
       const reviewData: CourseReview = {
         id: newReviewRef.id,
         userId,
-        courseId,
+        courseId: courseId || undefined,
+        planId: planId || undefined,
         disciplineId,
-        disciplineName, // <-- SALVANDO O NOME NO BANCO DE DADOS
+        disciplineName, 
         topicId,
         topicName,
         scheduledDate: scheduledDateStr,
@@ -106,15 +109,17 @@ export const courseReviewService = {
   },
 
   /**
-   * 2. Busca revisões pendentes ou atrasadas de um curso específico
+   * 2. Busca revisões pendentes ou atrasadas de um curso OU plano específico
    */
-  getPendingReviews: async (userId: string, courseId: string) => {
+  getPendingReviews: async (userId: string, targetId: string, type: 'course' | 'plan' = 'course') => {
     const reviewsRef = collection(db, 'users', userId, 'course_reviews');
     
-    // Busca tudo que não está concluído para este curso
+    const field = type === 'course' ? 'courseId' : 'planId';
+
+    // Busca tudo que não está concluído para este alvo
     const q = query(
         reviewsRef, 
-        where('courseId', '==', courseId), 
+        where(field, '==', targetId), 
         where('status', '!=', 'completed')
     );
     
@@ -171,7 +176,26 @@ export const courseReviewService = {
   },
 
   /**
-   * 5. Conclui uma revisão e verifica se deve gerar a próxima (Loop Infinito)
+   * 5. Deleta todas as revisões de um plano (Quando o aluno reinicia o plano)
+   */
+  deleteReviewsByPlan: async (userId: string, planId: string) => {
+    const reviewsRef = collection(db, 'users', userId, 'course_reviews');
+    const q = query(reviewsRef, where('planId', '==', planId));
+    
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty) return;
+
+    const batch = writeBatch(db);
+    snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+    });
+
+    await batch.commit();
+  },
+
+  /**
+   * 6. Conclui uma revisão e verifica se deve gerar a próxima (Loop Infinito)
    */
   completeReview: async (userId: string, review: CourseReview) => {
     const batch = writeBatch(db);

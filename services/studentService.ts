@@ -1,5 +1,5 @@
 
-import { doc, getDoc, updateDoc, writeBatch, collection, query, where, getDocs, Timestamp, increment, orderBy, limit, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, writeBatch, collection, query, where, getDocs, Timestamp, increment, orderBy, limit, setDoc, documentId } from 'firebase/firestore';
 import { db } from './firebase';
 
 const cleanObject = (obj: any): any => {
@@ -314,19 +314,20 @@ export const getTodayStudentSchedule = async (uid: string): Promise<{ planId: st
 export const getDashboardData = async (uid: string): Promise<{ 
   planId: string, 
   overdue: ScheduledEvent[], 
-  today: ScheduledEvent[] 
+  today: ScheduledEvent[],
+  lastScheduledDate: string | null
 }> => {
   // 1. Get Current Plan ID
   const userRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userRef);
   
-  if (!userSnap.exists()) return { planId: '', overdue: [], today: [] };
+  if (!userSnap.exists()) return { planId: '', overdue: [], today: [], lastScheduledDate: null };
   
   const userData = userSnap.data();
   const currentPlanId = userData.currentPlanId;
 
   if (userData.isPlanPaused || !currentPlanId) {
-    return { planId: currentPlanId || '', overdue: [], today: [] };
+    return { planId: currentPlanId || '', overdue: [], today: [], lastScheduledDate: null };
   }
 
   // 2. Calculate Date Strings (CORREÇÃO FUSO)
@@ -441,10 +442,19 @@ export const getDashboardData = async (uid: string): Promise<{
   const enrichedOverdue = await enrichWithMeta(overdueEvents);
   const enrichedToday = await enrichWithMeta(todayEvents);
 
+  // Fetch last scheduled date
+  let lastScheduledDate = null;
+  const lastScheduleQuery = query(schedulesRef, orderBy(documentId(), 'desc'), limit(1));
+  const lastScheduleSnap = await getDocs(lastScheduleQuery);
+  if (!lastScheduleSnap.empty) {
+    lastScheduledDate = lastScheduleSnap.docs[0].id;
+  }
+
   return { 
     planId: currentPlanId, 
     overdue: enrichedOverdue, 
-    today: enrichedToday 
+    today: enrichedToday,
+    lastScheduledDate
   };
 };
 
@@ -647,6 +657,16 @@ export const checkAndUnlockSimulados = async (uid: string, planId: string, cycle
 /**
  * Helper to fetch current student config
  */
+export const getStudentLastScheduledDate = async (uid: string) => {
+  const schedulesRef = collection(db, 'users', uid, 'schedules');
+  const lastScheduleQuery = query(schedulesRef, orderBy(documentId(), 'desc'), limit(1));
+  const lastScheduleSnap = await getDocs(lastScheduleQuery);
+  if (!lastScheduleSnap.empty) {
+    return lastScheduleSnap.docs[0].id;
+  }
+  return null;
+};
+
 export const getStudentConfig = async (uid: string) => {
   const userRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userRef);
@@ -654,11 +674,14 @@ export const getStudentConfig = async (uid: string) => {
   if (!userSnap.exists()) return null;
   
   const data = userSnap.data();
+  const lastScheduledDate = await getStudentLastScheduledDate(uid);
+
   return {
     currentPlanId: data.currentPlanId,
     routine: data.routine,
     studyProfile: data.studyProfile,
-    isPlanPaused: data.isPlanPaused || false
+    isPlanPaused: data.isPlanPaused || false,
+    lastScheduledDate
   };
 };
 
